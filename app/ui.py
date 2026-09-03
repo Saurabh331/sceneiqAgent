@@ -22,15 +22,15 @@ with st.sidebar:
     
     if uploaded_file is not None:
         if st.button("Process Document"):
-            with st.spinner("Processing document..."):
+            with st.spinner("Uploading document to Google Gemini..."):
                 try:
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    response = requests.post(f"{API_BASE_URL}/upload", files=files)
+                    response = requests.post(f"{API_BASE_URL}/documents", files=files)
                     
                     if response.status_code == 200:
                         data = response.json()
                         st.session_state.session_id = data.get("session_id")
-                        st.success(f"Document processed successfully! ({data.get('chunks_count')} chunks created)")
+                        st.success(f"Document processed successfully! ({data.get('chunks_count')} chunks ingested to BigQuery)")
                         # Clear chat history when new document is uploaded
                         st.session_state.messages = []
                     else:

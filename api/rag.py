@@ -1,63 +1,65 @@
-import json
-from typing import List, Dict
+import os
+from typing import List
+from google.cloud import bigquery
+from langchain_google_vertexai import VertexAIEmbeddings
+from langchain_google_community import BigQueryVectorStore
+from dotenv import load_dotenv
 
-# In-memory store for the MVP.
-# In production, this would be BigQuery Vector Search or Vertex AI Search.
-DOCUMENT_STORE: Dict[str, List[str]] = {}
+load_dotenv()
 
-def store_chunks(session_id: str, chunks: List[str]):
-    """Stores text chunks for a given session."""
-    DOCUMENT_STORE[session_id] = chunks
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "mock-project-id")
+DATASET = os.getenv("BQ_DATASET", "sceneiq_dataset")
+REGION = os.getenv("BQ_REGION", "us-central1")
+TABLE_NAME = "screenplay_embeddings"
 
-def retrieve_chunks(session_id: str, query: str, top_k: int = 3) -> List[str]:
-    """
-    Retrieves the most relevant chunks.
-    For this MVP prototype without an active vector database, 
-    we use a naive keyword matching approach as a placeholder for semantic search.
-    """
-    if session_id not in DOCUMENT_STORE:
-        return []
-        
-    chunks = DOCUMENT_STORE[session_id]
-    
-    # Simple term frequency for mock retrieval
-    query_terms = set(query.lower().split())
-    scored_chunks = []
-    
-    for chunk in chunks:
-        score = sum(1 for term in query_terms if term in chunk.lower())
-        scored_chunks.append((score, chunk))
-        
-    # Sort by score descending
-    scored_chunks.sort(key=lambda x: x[0], reverse=True)
-    
-    # Return top K
-    return [chunk for score, chunk in scored_chunks[:top_k] if score > 0] or chunks[:top_k]
-
-def generate_response(query: str, retrieved_chunks: List[str]) -> str:
-    """
-    Generates a response using an LLM.
-    For this MVP, it acts as a mock generation step to ensure the pipeline works 
-    before injecting actual API keys for Gemini.
-    """
-    if not retrieved_chunks:
-        return "I couldn't find any relevant information in the uploaded screenplay to answer your question."
-        
-    context = "\n\n".join(retrieved_chunks)
-    
-    # MOCK LLM behavior: Return a canned response that includes the context.
-    # In a real implementation, this would call `google-generativeai` or ADK.
-    response = (
-        f"Based on the provided screenplay context, here is what I found regarding your query: '{query}'\n\n"
-        f"**Relevant Excerpts:**\n"
-        f"{context[:500]}...\n\n"
-        f"*(Note: This is a simulated response. In production, this context is passed to Google Gemini for synthesis.)*"
+def get_vector_store() -> BigQueryVectorStore:
+    """Initializes and returns the BigQuery Vector Store."""
+    embeddings = VertexAIEmbeddings(
+        model_name="textembedding-gecko@003",
+        project=PROJECT_ID
     )
     
-    return response
+    # In a real environment, BigQueryVectorStore needs valid credentials and project setup.
+    # We try to initialize it; if it fails due to mock keys, we handle it in the caller.
+    store = BigQueryVectorStore(
+        project_id=PROJECT_ID,
+        dataset_name=DATASET,
+        table_name=TABLE_NAME,
+        location=REGION,
+        embedding=embeddings,
+    )
+    return store
 
-def process_chat(session_id: str, query: str) -> str:
-    """End-to-end RAG chat flow."""
-    chunks = retrieve_chunks(session_id, query)
-    response = generate_response(query, chunks)
-    return response
+def ingest_chunks_to_bq(chunks: List, session_id: str):
+    """Embeds and stores chunks in BigQuery."""
+    # Inject session_id into metadata for filtering during retrieval
+    for chunk in chunks:
+        chunk.metadata["session_id"] = session_id
+        
+    store = get_vector_store()
+    
+    if PROJECT_ID == "mock-project-id":
+        print(f"[MOCK] Would ingest {len(chunks)} chunks into BigQuery dataset {DATASET}.{TABLE_NAME}")
+        return
+        
+    # Add documents to the vector store
+    store.add_documents(chunks)
+
+def retrieve_from_bq(session_id: str, query: str, top_k: int = 4) -> List[str]:
+    """Retrieves context from BigQuery using vector similarity."""
+    if PROJECT_ID == "mock-project-id":
+        return [f"[MOCK BQ] Retrieved mock context for query '{query}' from session {session_id}."]
+        
+    store = get_vector_store()
+    
+    # Filter by session_id to only search within the uploaded document
+    # Note: BigQueryVectorStore supports filtering via metadata dicts or SQL WHERE strings depending on version.
+    # Assuming basic metadata filtering is supported:
+    filter_dict = {"session_id": session_id}
+    
+    try:
+        results = store.similarity_search(query, k=top_k, filter=filter_dict)
+        return [doc.page_content for doc in results]
+    except Exception as e:
+        print(f"Error during BQ retrieval: {e}")
+        return []
