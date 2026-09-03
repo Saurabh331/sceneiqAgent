@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+streamlit
+python-multipart
+PyPDF2
+pydantic
+requests
+google-generativeai
+python-dotenv
