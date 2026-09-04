@@ -8,14 +8,20 @@ from .rag import retrieve_from_bq
 from google.oauth2 import service_account
 from google.cloud import storage
 
+from .auth import get_google_credentials
+
 load_dotenv()
 
+credentials = get_google_credentials()
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-if API_KEY and API_KEY != "mock":
+if credentials:
+    # Use OAuth credentials if available
+    client = genai.Client(credentials=credentials)
+    MOCK_MODE = False
+elif API_KEY and API_KEY != "mock":
+    # Fallback to API Key
     client = genai.Client(api_key=API_KEY)
-    # credentials = service_account.Credentials.from_service_account_file('C:\\Users\\Dr.Strange\\Downloads\\client_secret_googl.json')
-    # client = genai.Client(credentials=credentials)
     MOCK_MODE = False
 else:
     client = None
@@ -75,7 +81,7 @@ def process_agentic_chat(session_id: str, user_query: str) -> dict:
             tools=tools_list,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
         )
-        chat = client.chats.create(model="gemini-1.5-flash", config=config)
+        chat = client.chats.create(model="gemini-3.8-flash", config=config)
         
         response = chat.send_message(
             f"You are a helpful Hollywood production assistant agent. Answer the user's question using the tools available to you. \n\nUser Question: {user_query}"

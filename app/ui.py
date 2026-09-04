@@ -29,7 +29,7 @@ with st.sidebar:
                     
                     if response.status_code == 200:
                         data = response.json()
-                        st.session_state.session_id = data.get("session_id")
+                        st.session_state.session_id = data.get("document_id")
                         st.success(f"Document processed successfully! ({data.get('chunks_count')} chunks ingested to BigQuery)")
                         # Clear chat history when new document is uploaded
                         st.session_state.messages = []
