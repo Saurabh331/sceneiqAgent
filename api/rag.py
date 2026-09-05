@@ -18,7 +18,7 @@ def get_vector_store() -> BigQueryVectorStore:
     credentials = get_google_credentials()
 
     embeddings = VertexAIEmbeddings(
-        model_name="text-embedding-large-exp-03-07",
+        model_name="text-embedding-004",
         project=PROJECT_ID,
         credentials=credentials
     )
@@ -36,9 +36,6 @@ def get_vector_store() -> BigQueryVectorStore:
         # Pass explicit client if it's available and supported, otherwise rely on ADC
     )
     
-    if client:
-        store.client = client
-        
     return store
 
 def ingest_chunks_to_bq(chunks: List, session_id: str):

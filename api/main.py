@@ -8,6 +8,8 @@ from .ingestion import load_and_split_document
 from .rag import ingest_chunks_to_bq
 from .agent import process_agentic_chat, parallel_search
 from .models import Document, Insight, DB
+from .auth import verify_user_token
+from fastapi import Depends
 
 app = FastAPI(title="SceneIQ API")
 
@@ -29,7 +31,7 @@ class ResearchRequest(BaseModel):
     query: str
 
 @app.post("/documents")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), user: dict = Depends(verify_user_token)):
     """Upload and register a screenplay."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -66,7 +68,7 @@ async def upload_document(file: UploadFile = File(...)):
             os.remove(file_path)
 
 @app.get("/documents/{id}/status")
-async def get_document_status(id: str):
+async def get_document_status(id: str, user: dict = Depends(verify_user_token)):
     """Check ingestion and indexing status."""
     doc = DB["documents"].get(id)
     if not doc:
@@ -74,13 +76,13 @@ async def get_document_status(id: str):
     return {"document_id": id, "status": doc.status}
 
 @app.get("/documents/{id}/insights")
-async def get_document_insights(id: str):
+async def get_document_insights(id: str, user: dict = Depends(verify_user_token)):
     """Return extracted screenplay intelligence."""
     insights = DB["insights"].get(id, [])
     return {"document_id": id, "insights": insights}
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, user: dict = Depends(verify_user_token)):
     """Run grounded SceneIQ conversation."""
     try:
         result = process_agentic_chat(request.session_id, request.query)
@@ -89,7 +91,7 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/research")
-async def research(request: ResearchRequest):
+async def research(request: ResearchRequest, user: dict = Depends(verify_user_token)):
     """Invoke externally grounded partner research."""
     try:
         result = parallel_search(request.query)

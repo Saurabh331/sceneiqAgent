@@ -1,26 +1,40 @@
 import os
-from google.oauth2.credentials import Credentials
+import google.auth
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
+from fastapi import HTTPException, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-def get_google_credentials() -> Credentials:
+oauth2_scheme = HTTPBearer()
+
+def verify_user_token(credentials: HTTPAuthorizationCredentials = Security(oauth2_scheme)) -> dict:
     """
-    Constructs Google OAuth2 Credentials using refresh token and client secrets
-    provided via environment variables.
+    Verifies the Google OAuth2 id_token sent by the frontend in the Authorization header.
+    Returns the decoded token payload if valid.
     """
+    token = credentials.credentials
     client_id = os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN")
     
-    if not client_id or not client_secret or not refresh_token:
-        # Fallback to None (ADC) if any are missing, or you could raise an error here.
-        # But for robustness we'll just log and let ADC handle it if they aren't fully set up yet.
-        print("Warning: Missing one or more OAuth credentials in environment (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN).")
-        return None
+    try:
+        # Verify the token against Google's public certificates
+        request = google_requests.Request()
+        id_info = id_token.verify_oauth2_token(token, request, client_id)
         
-    return Credentials(
-        token=None,
-        refresh_token=refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=client_id,
-        client_secret=client_secret,
-        scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
+        # Verify the issuer.
+        if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
+            
+        return id_info
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+
+def get_google_credentials():
+    """
+    Retrieves Google Cloud credentials using Application Default Credentials (ADC).
+    """
+    try:
+        credentials, project = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        return credentials
+    except Exception as e:
+        print(f"Warning: Could not get default credentials. {e}")
+        return None
