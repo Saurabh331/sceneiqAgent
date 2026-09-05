@@ -5,18 +5,24 @@ from google.genai import types
 from dotenv import load_dotenv
 
 from .rag import retrieve_from_bq
-from google.oauth2 import service_account
-from google.cloud import storage
-
 load_dotenv()
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-if API_KEY and API_KEY != "mock":
-    client = genai.Client(api_key=API_KEY)
-    # credentials = service_account.Credentials.from_service_account_file('C:\\Users\\Dr.Strange\\Downloads\\client_secret_googl.json')
-    # client = genai.Client(credentials=credentials)
-    MOCK_MODE = False
+if PROJECT_ID and PROJECT_ID != "mock-project-id":
+    try:
+        # Vertex AI automatically picks up Application Default Credentials (ADC)
+        client = genai.Client(
+            vertexai=True,
+            project=PROJECT_ID,
+            location=LOCATION,
+        )
+        MOCK_MODE = False
+    except Exception as e:
+        print(f"Warning: Failed to initialize Vertex AI client: {e}")
+        client = None
+        MOCK_MODE = True
 else:
     client = None
     MOCK_MODE = True

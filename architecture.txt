@@ -1,0 +1,319 @@
+SCENEIQ 
+Architecture, Solution Design & Partner Integration 
+From Script to Screen, Intelligently 
+ 
+ 
+Document purpose 
+Public hackathon architecture and implementation blueprint 
+Recommended track 
+Parallel 
+Primary platform 
+Google Cloud + Gemini Enterprise Agent Platform 
+Status 
+Proposed MVP design 
+ 
+ 
+Public-information note: This document contains product design assumptions and public hackathon requirements only. It intentionally excludes credentials, internal endpoints, proprietary datasets, and confidential implementation details. 
+ 
+1. Executive Summary 
+SceneIQ is an agentic screenplay intelligence platform that converts screenplays and related production documents into searchable, grounded, and actionable production knowledge. Users upload a script and ask natural-language questions about characters, scenes, locations, story arcs, and production complexity. 
+The proposed MVP uses Google Gemini and the Google Agent Development Kit for reasoning and orchestration, a retrieval layer for screenplay grounding, and Parallel Search API as the recommended partner integration for fresh, traceable web context. The partner integration is invoked at runtime and is not merely referenced in documentation. 
+Goal 
+MVP outcome 
+Reduce script review effort 
+Generate grounded summaries and structured screenplay insights. 
+Improve discoverability 
+Enable semantic queries across scenes, characters, and locations. 
+Add external context 
+Use Parallel at runtime for current, source-linked research when requested. 
+Demonstrate agentic behavior 
+Execute deterministic multi-step flows with tool selection and response synthesis. 
+ 
+2. Scope and Design Principles 
+2.1 MVP Scope 
+Upload PDF or text screenplay documents. 
+Parse and chunk the script while retaining page, scene, and source metadata. 
+Extract characters, locations, scenes, and key story arcs. 
+Provide grounded conversational Q&A with source references. 
+Identify explainable production complexity indicators, such as crowd scenes, multiple locations, night shoots, action sequences, or special-effects cues. 
+Invoke Parallel Search API for external research, verification, and market or location context when appropriate. 
+2.2 Out of Scope for the MVP 
+Automated final casting decisions. 
+Authoritative budget estimates or legal/compliance conclusions. 
+Full video generation or feature-film rendering. 
+Unattended actions that modify external production systems. 
+2.3 Design Principles 
+Ground answers in the uploaded screenplay. 
+Keep AI-generated recommendations explainable and visibly separate from source facts. 
+Minimize partner calls through intent routing and caching. 
+Use least-privilege access, secret isolation, and auditable tool calls. 
+Prefer a coherent end-to-end product experience over a collection of disconnected demos. 
+ 
+3. Solution Architecture 
+ 
+
+
+Figure 1. SceneIQ reference architecture 
+
+
+
+3.1 Component Responsibilities 
+Layer 
+Primary components 
+Responsibility 
+Experience 
+Streamlit or web UI 
+Upload scripts, submit questions, review insights and citations. 
+API 
+FastAPI 
+Validate requests, manage sessions, expose agent endpoints. 
+Agent orchestration 
+Google ADK, Gemini, Agent Engine 
+Plan tasks, call tools, maintain workflow state, synthesize responses. 
+Document intelligence 
+Parser, chunker, extractors 
+Convert screenplay content into structured and retrievable units. 
+Knowledge and retrieval 
+Embeddings, RAG, BigQuery Vector Search or Vertex AI Search 
+Retrieve relevant screenplay passages and metadata. 
+Partner integration 
+Parallel Search API or MCP 
+Provide fresh web information and traceable external grounding at runtime. 
+Storage 
+Cloud Storage, BigQuery 
+Store source files, structured entities, chunks, and analytics. 
+Runtime and security 
+Cloud Run, Secret Manager, IAM 
+Host services and protect credentials using least privilege. 
+Observability 
+Cloud Logging; optional Grafana 
+Capture errors, latency, tool calls, and operational signals. 
+ 
+3.2 Logical Data Flow 
+1. A user uploads a screenplay. 
+2. The ingestion service validates the file, extracts text, identifies screenplay structure, and creates metadata-aware chunks. 
+3. The knowledge layer creates embeddings and indexes chunks for semantic retrieval. 
+4. The SceneIQ agent classifies the user intent and selects local screenplay tools, external research tools, or both. 
+5. For script questions, the retrieval tool returns relevant passages with provenance. 
+6. For current external context, the agent calls Parallel Search API at runtime and retains returned source metadata. 
+7. Gemini synthesizes a response, clearly distinguishing screenplay evidence from external information and AI suggestions. 
+8. Operational telemetry is recorded without storing secrets or unnecessary personal data. 
+4. Agent and Application Design 
+4.1 Suggested Agent Roles 
+Agent / tool 
+Purpose 
+Typical output 
+Orchestrator Agent 
+Classifies intent and coordinates the workflow. 
+Execution plan and selected tools. 
+Script Analyst 
+Summarizes plot, scenes, and themes using retrieved evidence. 
+Grounded analysis with references. 
+Entity Extractor 
+Normalizes characters, locations, props, and scene metadata. 
+Structured JSON entities. 
+Production Insight Tool 
+Flags explainable complexity signals. 
+Risk indicators with evidence, not definitive costs. 
+External Research Tool 
+Calls Parallel for fresh, traceable public-web context. 
+Sources, snippets, and normalized findings. 
+Response Composer 
+Combines evidence, caveats, and actionable next steps. 
+Readable final response. 
+ 
+4.2 Core Data Objects 
+Object 
+Representative fields 
+Document 
+document_id, filename, checksum, upload_time, status 
+Chunk 
+chunk_id, document_id, page, scene_id, text, embedding 
+Scene 
+scene_id, heading, location, time_of_day, characters, page_range 
+Character 
+character_id, canonical_name, aliases, appearances 
+Insight 
+type, severity, evidence_chunk_ids, explanation, confidence 
+External source 
+query, title, URL, retrieved_at, source_excerpt 
+ 
+4.3 API Surface (Proposed) 
+Endpoint 
+Method 
+Purpose 
+/documents 
+POST 
+Upload and register a screenplay. 
+/documents/{id}/status 
+GET 
+Check ingestion and indexing status. 
+/documents/{id}/insights 
+GET 
+Return extracted screenplay intelligence. 
+/chat 
+POST 
+Run grounded SceneIQ conversation. 
+/research 
+POST 
+Invoke externally grounded partner research. 
+/health 
+GET 
+Return readiness status. 
+ 
+ 
+5. Partner Track Analysis and Recommendation 
+The hackathon requires a functional Gemini and Google Cloud Agent Builder solution that integrates a partner product or MCP at runtime. The submission must demonstrate actual use of both Google Cloud and the selected partner service in the code. 
+Partner 
+Published runtime requirement 
+SceneIQ fit 
+Recommendation 
+Parallel 
+Actively use Parallel Search API at runtime through its SDK, supported integration, grounding configuration, or MCP. 
+High: fresh, traceable research for locations, market context, comparable works, and production considerations. 
+Recommended MVP track. 
+Grafana Labs 
+Actively use the Grafana stack at runtime, primarily through the Grafana Cloud MCP server; AI Observability alone does not satisfy the stated requirement. 
+Medium: strong for production operations and agent observability, less central to screenplay intelligence. 
+Good observability-focused variant. 
+IBM 
+Use IBM Bob as part of the development process; projects without demonstrated IBM Bob usage do not meet the IBM track requirement. Confluent is optional but encouraged. 
+Medium: useful for development workflow, but less visible in the end-user SceneIQ experience. 
+Use if IBM Bob is central to the build story. 
+ClickHouse 
+Listed as a partner track; the reviewed general hackathon page requires actual runtime partner use. 
+High potential for vector search, analytics, and high-volume scene telemetry, but exact track-specific requirement was not available in the reviewed source set. 
+Validate its partner page before selecting. 
+Replit 
+Listed as a partner track; the reviewed update describes setup, hosting, deploys, and debugging. 
+High for rapid hosting and demo delivery, but exact track-specific runtime requirement was not available in the reviewed source set. 
+Validate its partner page before selecting. 
+ 
+5.1 Recommended Partner: Parallel 
+Parallel is the strongest fit for the current SceneIQ concept because external web grounding extends screenplay analysis without replacing the core document intelligence experience. It also creates a visible runtime interaction that can be demonstrated clearly during judging. 
+Location research: retrieve current public information relevant to a screenplay location. 
+Comparable-content research: identify and summarize publicly available references while preserving source links. 
+Production context: gather current public information requested by the user, such as location constraints or industry context, with citations. 
+Freshness check: verify time-sensitive external claims instead of relying only on model memory. 
+5.2 Runtime Integration Pattern 
+The Orchestrator determines whether the question is document-only or requires external context. 
+Document-only questions stay within the screenplay RAG flow. 
+External-context questions call Parallel Search at runtime through a dedicated adapter. 
+The adapter normalizes titles, URLs, excerpts, and retrieval metadata. 
+The response composer distinguishes screenplay evidence, external sources, and AI-generated suggestions. 
+Tool-call logs demonstrate that the partner service was genuinely invoked. 
+5.3 Partner Evidence for Submission 
+A public repository containing the actual partner SDK or MCP call. 
+Configuration instructions using environment variables, without committing credentials. 
+A demo segment showing the agent issue a partner-backed query and return sources. 
+Logs or trace output proving runtime invocation. 
+README architecture and data-flow explanation. 
+6. Security, Privacy, and Responsible AI 
+Control 
+Design response 
+Secrets 
+Store API keys in Secret Manager; never expose them in the repository or client. 
+Access 
+Use IAM roles with least privilege for storage, model, and runtime access. 
+Uploaded content 
+Define retention and deletion behavior; avoid using confidential scripts in a public demo. 
+Grounding 
+Return screenplay references and external source links where applicable. 
+Generated insights 
+Label production risk and cost indicators as advisory, not authoritative. 
+Prompt injection 
+Separate system instructions from document content and validate tool arguments. 
+Logging 
+Avoid logging full screenplay text, credentials, or unnecessary personal information. 
+ 
+7. Non-Functional Requirements 
+Area 
+MVP target / approach 
+Reliability 
+Graceful failures, retry only transient partner errors, and display actionable messages. 
+Performance 
+Asynchronous ingestion is an architectural option; interactive queries should use indexed chunks and bounded context. 
+Scalability 
+Stateless API and agent services on Cloud Run; storage and vector services scale independently. 
+Explainability 
+Show evidence passages, sources, and clear labels for inferred recommendations. 
+Maintainability 
+Modular tools, typed schemas, environment-based configuration, and automated tests. 
+Cost control 
+Cache stable research, limit context size, use intent routing, and capture token/tool usage. 
+ 
+ 
+8. Testing and Acceptance Criteria 
+Test area 
+Acceptance criterion 
+Ingestion 
+A supported screenplay can be uploaded, parsed, and indexed without losing page/scene provenance. 
+Retrieval 
+Questions return relevant screenplay passages and identify their source location. 
+Extraction 
+Characters, scenes, and locations are emitted in a stable structured schema. 
+Partner integration 
+A research query invokes Parallel at runtime and returns traceable sources. 
+Grounding 
+The final answer distinguishes document evidence from external information. 
+Security 
+No secret is exposed in source code, browser output, or logs. 
+Demo readiness 
+The hosted project, public repository, and concise working demo align with submission requirements. 
+ 
+9. Implementation Backlog 
+Priority 
+Work item 
+Definition of done 
+P0 
+Repository and cloud setup 
+Public repo structure, license, environment template, Google Cloud project configuration. 
+P0 
+Screenplay ingestion 
+PDF/text upload, parsing, chunking, metadata, and storage. 
+P0 
+RAG query flow 
+Semantic retrieval and grounded Gemini response. 
+P0 
+Parallel integration 
+Runtime API/MCP invocation, normalized sources, and error handling. 
+P0 
+Demo UI 
+Upload, chat, insights, and citations. 
+P1 
+Structured extraction 
+Characters, locations, scenes, and story arcs. 
+P1 
+Production indicators 
+Evidence-backed complexity flags. 
+P1 
+Observability 
+Latency, failures, token usage, and partner tool-call telemetry. 
+P1 
+Evaluation 
+Golden questions, retrieval checks, hallucination checks, and demo script. 
+ 
+10. Deployment View 
+Frontend: Streamlit or lightweight web interface. 
+Backend: FastAPI deployed to Cloud Run. 
+Agent: Google ADK with Gemini, deployed through the selected Google Cloud agent runtime. 
+Data: Cloud Storage for source files; BigQuery and a vector-capable retrieval service for metadata and embeddings. 
+Partner: Parallel Search API or MCP called by a server-side adapter. 
+Secrets: Secret Manager; no keys in client code. 
+CI/CD: GitHub-based build and deployment pipeline with tests and secret scanning. 
+11. Public Submission Checklist 
+Hosted project URL. 
+Public source repository with all code, assets, setup instructions, and an open-source license visible at repository level. 
+Runtime use of Google Cloud and the selected partner service is observable in code and demo. 
+English demo video, or English subtitles, showing the built agent functioning. 
+Devpost description, architecture, Built With keywords, and selected partner track. 
+No private screenplay, internal endpoint, credential, or confidential dataset in the submission. 
+12. Sources and Assumptions 
+Public source references reviewed on 2 September 2026: 
+Agentic Cinema overview and submission requirements: https://agentic-cinema.devpost.com/ 
+Agentic Cinema resource guide: https://agentic-cinema.devpost.com/resources 
+IBM partner resources: https://agentic-cinema.devpost.com/details/ibm-resources 
+Parallel partner resources: https://agentic-cinema.devpost.com/details/parallel-resources 
+Grafana partner resources: https://agentic-cinema.devpost.com/details/grafana-resources 
+Hackathon updates and build-session information: https://agentic-cinema.devpost.com/updates 
+Design assumptions: The exact Google Cloud implementation choice between managed Agent Builder capabilities, ADK/Agent Engine, BigQuery Vector Search, and Vertex AI Search should be finalized during the MVP implementation. References to Streamlit, FastAPI, extraction schemas, risk indicators, and API endpoints are proposed SceneIQ design decisions, not published hackathon requirements.
