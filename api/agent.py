@@ -8,7 +8,7 @@ from .rag import retrieve_from_bq
 load_dotenv()
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION") or "us-central1"
 
 if PROJECT_ID and PROJECT_ID != "mock-project-id":
     try:
