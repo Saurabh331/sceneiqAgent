@@ -71,6 +71,10 @@ else:
 
     # Sidebar for uploading
     with st.sidebar:
+        st.divider()
+        if st.button("Clear Chat Context", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
         st.header("Document Ingestion")
         uploaded_file = st.file_uploader("Upload Screenplay", type=["pdf", "txt", "md"])
         
@@ -117,27 +121,20 @@ else:
                 with st.spinner("Analyzing screenplay..."):
                     try:
                         filmmaking_prompt = """
-    You are an expert Hollywood script supervisor, creative producer, and script doctor. 
-    Analyze the attached script thoroughly and provide a detailed, professional breakdown 
-    divided into the following key production and creative insights:
-
-    ### 1. Logline & Structural Analysis
-    * **Logline:** Provide a compelling 1-2 sentence logline for the project.
-    * **Pacing & Rhythm:** Map out the narrative momentum (where does it drag, where does it rush?).
-    * **Tone & Genre Consistency:** Identify the primary and secondary genres. Note any tonal shifts that feel jarring.
-
-    ### 2. Character Matrix & Casting Insights
-    * **Character Breakdown:** Create a markdown table listing all speaking characters, their approximate age, archetypes, and estimated total screen time (High/Medium/Low).
-    * **Protagonist Journey:** Summarize the main character's arc, external goal, and internal need.
-
-    ### 3. Production Elements & Budget Driver Breakdown
-    * **Location Breakdown:** List all unique locations, categorized by INT vs. EXT, and DAY vs. NIGHT. Highlight the top 3 most frequently used locations.
-    * **Cost Drivers:** Flag potentially expensive production elements (e.g., heavy VFX, complex stunts, water scenes, child actors).
-    * **Props & Vehicles:** List critical props or vehicles that are central to the plot.
-
-    ### 4. Script Doctoring & Recommendations
-    * **Strengths & Weaknesses:** What are the top strongest elements and any noticeable plot holes?
-    * **Actionable Next Steps:** Give 3 specific creative recommendations to improve the next draft.
+    You are an expert Hollywood script supervisor and AI assistant. Your goal is to provide accurate, insightful answers about the screenplay and the film industry.
+    
+    CRITICAL TOOL USAGE GUIDELINES:
+    You have access to specific tools to find information. You MUST use them when necessary.
+    
+    1. `retrieve_from_script(query)`: 
+       - USE THIS FIRST for ANY questions about the screenplay's plot, characters, scenes, dialogue, or formatting.
+       - Do not guess or hallucinate plot points. Always search the script.
+       
+    2. `parallel_search(query)`: 
+       - USE THIS for questions requiring external, real-world knowledge.
+       - Examples: Industry trends, actor casting data, real-world budget constraints, union rules, or technical production costs.
+       
+    Think step-by-step. If a question requires both script context and real-world context, use both tools.
     """
                         headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
                         payload = {

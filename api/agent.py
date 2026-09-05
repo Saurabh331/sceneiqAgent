@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from .rag import retrieve_from_bq
 from google.oauth2 import service_account
 from google.cloud import storage
+from google import genai
+from google.genai.types import HttpOptions
 
 from .auth import get_google_credentials
 
@@ -18,7 +20,7 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 
 if API_KEY and API_KEY != "mock":
     # Use API Key for Google AI Studio
-    client = genai.Client(api_key=API_KEY)
+    # client = genai.Client(api_key=API_KEY)
     MOCK_MODE = False
 elif credentials:
     # If no API key is provided, assume we want Vertex AI using GCP credentials
@@ -30,16 +32,20 @@ else:
     client = None
     MOCK_MODE = True
 
-def send_message_with_retry(chat, message, max_retries=5):
+def send_message_with_retry(client, model, contents, config, max_retries=2):
     """Sends a message to the Gemini API with exponential backoff retry for 429 and 503 errors."""
     for attempt in range(max_retries):
         try:
-            return chat.send_message(message)
+            resp = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config
+            )
+            return resp
         except Exception as e:
             error_str = str(e)
             if "503" in error_str or "429" in error_str or "quota" in error_str.lower() or "limit" in error_str.lower():
                 if attempt < max_retries - 1:
-                    # AI Studio free tier limit is 15 RPM, so we might need to wait up to a minute
                     wait_time = 15 * (attempt + 1)
                     print(f"Encountered API error: {error_str[:100]}... Retrying in {wait_time} seconds (Attempt {attempt+1}/{max_retries})...")
                     time.sleep(wait_time)
@@ -104,13 +110,19 @@ def process_agentic_chat(session_id: str, user_query: str, system_instruction: s
             config_kwargs["system_instruction"] = system_instruction
             
         config = types.GenerateContentConfig(**config_kwargs)
-        chat = client.chats.create(model="gemini-3.8-flash", config=config)
         
-        response = send_message_with_retry(chat, 
-            f"You are a helpful Hollywood production assistant agent. Answer the user's question using the tools available to you. \n\nUser Question: {user_query}"
-        )
+        # Initialize contents array with user prompt
+        contents = [
+            f""" User Question: {user_query}"""
+        ]
+        
+        response = send_message_with_retry(client, model="gemini-2.5-flash", contents=contents, config=config)
         
         while response.function_calls:
+            # Append model's tool calls to the history
+            contents.append(response.candidates[0].content)
+            tool_response_parts = []
+            
             for function_call in response.function_calls:
                 func_name = function_call.name
                 args = function_call.args
@@ -126,14 +138,20 @@ def process_agentic_chat(session_id: str, user_query: str, system_instruction: s
                 else:
                     tool_result = f"Error: Tool {func_name} not found."
                     
-                tool_log.append(f"Observation: {tool_result[:200]}...")
+                tool_log.append(f"Observation: {str(tool_result)[:200]}...")
                 
-                tool_response_part = types.Part.from_function_response(
-                    name=func_name,
-                    response={"result": tool_result}
+                tool_response_parts.append(
+                    types.Part.from_function_response(
+                        name=func_name,
+                        response={"result": tool_result}
+                    )
                 )
                 
-            response = send_message_with_retry(chat, tool_response_part)
+            # Append the tool responses to the history
+            contents.append(types.Content(role="user", parts=tool_response_parts))
+            
+            # Send back the results to get final generation
+            response = send_message_with_retry(client, model="gemini-2.5-flash", contents=contents, config=config)
 
         tool_log.append("Action: Return final response to user.")
         return {"response": response.text, "tool_log": tool_log}
