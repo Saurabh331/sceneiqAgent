@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -28,6 +29,21 @@ elif credentials:
 else:
     client = None
     MOCK_MODE = True
+
+def send_message_with_retry(chat, message, max_retries=3):
+    """Sends a message to the Gemini API with exponential backoff retry for 429 and 503 errors."""
+    for attempt in range(max_retries):
+        try:
+            return chat.send_message(message)
+        except Exception as e:
+            error_str = str(e)
+            if "503" in error_str or "429" in error_str or "quota" in error_str.lower() or "limit" in error_str.lower():
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    print(f"Encountered API error: {error_str}. Retrying in {wait_time} seconds (Attempt {attempt+1}/{max_retries})...")
+                    time.sleep(wait_time)
+                    continue
+            raise e
 
 def search_screenplay(session_id: str, query: str) -> str:
     """
@@ -85,7 +101,7 @@ def process_agentic_chat(session_id: str, user_query: str) -> dict:
         )
         chat = client.chats.create(model="gemini-3.8-flash", config=config)
         
-        response = chat.send_message(
+        response = send_message_with_retry(chat, 
             f"You are a helpful Hollywood production assistant agent. Answer the user's question using the tools available to you. \n\nUser Question: {user_query}"
         )
         
@@ -112,7 +128,7 @@ def process_agentic_chat(session_id: str, user_query: str) -> dict:
                     response={"result": tool_result}
                 )
                 
-            response = chat.send_message(tool_response_part)
+            response = send_message_with_retry(chat, tool_response_part)
 
         tool_log.append("Action: Return final response to user.")
         return {"response": response.text, "tool_log": tool_log}
