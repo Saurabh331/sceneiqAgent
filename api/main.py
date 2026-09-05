@@ -22,6 +22,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 class ChatRequest(BaseModel):
     session_id: str
     query: str
+    system_instruction: str = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -85,7 +86,7 @@ async def get_document_insights(id: str, user: dict = Depends(verify_user_token)
 async def chat(request: ChatRequest, user: dict = Depends(verify_user_token)):
     """Run grounded SceneIQ conversation."""
     try:
-        result = process_agentic_chat(request.session_id, request.query)
+        result = process_agentic_chat(request.session_id, request.query, request.system_instruction)
         return ChatResponse(response=result["response"], tool_log=result["tool_log"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

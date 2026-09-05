@@ -116,10 +116,34 @@ else:
             with st.chat_message("assistant"):
                 with st.spinner("Analyzing screenplay..."):
                     try:
+                        filmmaking_prompt = """
+    You are an expert Hollywood script supervisor, creative producer, and script doctor. 
+    Analyze the attached script thoroughly and provide a detailed, professional breakdown 
+    divided into the following key production and creative insights:
+
+    ### 1. Logline & Structural Analysis
+    * **Logline:** Provide a compelling 1-2 sentence logline for the project.
+    * **Pacing & Rhythm:** Map out the narrative momentum (where does it drag, where does it rush?).
+    * **Tone & Genre Consistency:** Identify the primary and secondary genres. Note any tonal shifts that feel jarring.
+
+    ### 2. Character Matrix & Casting Insights
+    * **Character Breakdown:** Create a markdown table listing all speaking characters, their approximate age, archetypes, and estimated total screen time (High/Medium/Low).
+    * **Protagonist Journey:** Summarize the main character's arc, external goal, and internal need.
+
+    ### 3. Production Elements & Budget Driver Breakdown
+    * **Location Breakdown:** List all unique locations, categorized by INT vs. EXT, and DAY vs. NIGHT. Highlight the top 3 most frequently used locations.
+    * **Cost Drivers:** Flag potentially expensive production elements (e.g., heavy VFX, complex stunts, water scenes, child actors).
+    * **Props & Vehicles:** List critical props or vehicles that are central to the plot.
+
+    ### 4. Script Doctoring & Recommendations
+    * **Strengths & Weaknesses:** What are the top strongest elements and any noticeable plot holes?
+    * **Actionable Next Steps:** Give 3 specific creative recommendations to improve the next draft.
+    """
                         headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
                         payload = {
                             "session_id": st.session_state.session_id,
-                            "query": prompt
+                            "query": prompt,
+                            "system_instruction": filmmaking_prompt
                         }
                         response = requests.post(f"{API_BASE_URL}/chat", json=payload, headers=headers)
                         

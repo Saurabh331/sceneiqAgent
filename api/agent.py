@@ -63,7 +63,7 @@ def parallel_search(query: str) -> str:
     """
     return f"Mocked Web Search Results for '{query}': According to recent production data, similar requirements typically incur a 15% budget premium due to 2026 industry standards and union rules."
 
-def process_agentic_chat(session_id: str, user_query: str) -> dict:
+def process_agentic_chat(session_id: str, user_query: str, system_instruction: str = None) -> dict:
     """
     Main orchestration loop for the agent using Gemini Tool Calling.
     """
@@ -96,10 +96,14 @@ def process_agentic_chat(session_id: str, user_query: str) -> dict:
         return {"response": final_answer, "tool_log": tool_log}
 
     else:
-        config = types.GenerateContentConfig(
-            tools=tools_list,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
-        )
+        config_kwargs = {
+            "tools": tools_list,
+            "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True)
+        }
+        if system_instruction:
+            config_kwargs["system_instruction"] = system_instruction
+            
+        config = types.GenerateContentConfig(**config_kwargs)
         chat = client.chats.create(model="gemini-3.8-flash", config=config)
         
         response = send_message_with_retry(chat, 
