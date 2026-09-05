@@ -30,7 +30,7 @@ else:
     client = None
     MOCK_MODE = True
 
-def send_message_with_retry(chat, message, max_retries=3):
+def send_message_with_retry(chat, message, max_retries=5):
     """Sends a message to the Gemini API with exponential backoff retry for 429 and 503 errors."""
     for attempt in range(max_retries):
         try:
@@ -39,8 +39,9 @@ def send_message_with_retry(chat, message, max_retries=3):
             error_str = str(e)
             if "503" in error_str or "429" in error_str or "quota" in error_str.lower() or "limit" in error_str.lower():
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    print(f"Encountered API error: {error_str}. Retrying in {wait_time} seconds (Attempt {attempt+1}/{max_retries})...")
+                    # AI Studio free tier limit is 15 RPM, so we might need to wait up to a minute
+                    wait_time = 15 * (attempt + 1)
+                    print(f"Encountered API error: {error_str[:100]}... Retrying in {wait_time} seconds (Attempt {attempt+1}/{max_retries})...")
                     time.sleep(wait_time)
                     continue
             raise e

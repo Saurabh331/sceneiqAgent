@@ -18,9 +18,10 @@ def get_vector_store() -> BigQueryVectorStore:
     credentials = get_google_credentials()
 
     embeddings = VertexAIEmbeddings(
-        model_name="text-embedding-004",
+        model_name="gemini-embedding-001",
         project=PROJECT_ID,
-        credentials=credentials
+        credentials=credentials,
+        dimensions=256
     )
     
     # In a real environment, BigQueryVectorStore needs valid credentials and project setup.
