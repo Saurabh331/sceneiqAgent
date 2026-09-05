@@ -13,4 +13,4 @@ langchain-google-community[bq]
 google-cloud-bigquery
 pypdf
 python-docx
-numpy<2.0.0
+numpy
