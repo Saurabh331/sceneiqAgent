@@ -71,7 +71,7 @@ def get_global_context(full_text: str) -> str:
     except Exception:
         return "A movie script."
 
-def process_scene(i: int, scene_text: str, global_context: str) -> List[Document]:
+def process_scene(i: int, scene_text: str, global_context: str, extract_props: bool = True) -> List[Document]:
     """Processes a single scene text into chunked and enriched Documents."""
     scene_text = scene_text.strip()
     if not scene_text:
@@ -135,7 +135,7 @@ def process_scene(i: int, scene_text: str, global_context: str) -> List[Document
         documents.append(doc)
         
     # 3. Propositional Embeddings
-    propositions = extract_propositions(scene_text)
+    propositions = extract_propositions(scene_text) if extract_props else []
     for prop in propositions:
         prop_enriched = f"{metadata_prefix}\n\nFact: {prop}"
         doc = Document(
@@ -150,7 +150,7 @@ def process_scene(i: int, scene_text: str, global_context: str) -> List[Document
         
     return documents
 
-def parse_and_chunk_script(full_text: str) -> List[Document]:
+def parse_and_chunk_script(full_text: str, extract_props: bool = True) -> List[Document]:
     """
     Custom parser that creates hierarchical, metadata-enriched, 
     and context-aware chunks from a movie script, using parallel processing.
@@ -174,7 +174,7 @@ def parse_and_chunk_script(full_text: str) -> List[Document]:
     # Process scenes concurrently with a ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_scene = {
-            executor.submit(process_scene, i, text, global_context): i 
+            executor.submit(process_scene, i, text, global_context, extract_props): i 
             for i, text in scene_texts
         }
         
@@ -189,7 +189,7 @@ def parse_and_chunk_script(full_text: str) -> List[Document]:
     return documents
 
 
-def load_and_split_document(file_path: str, filename: str) -> List[Document]:
+def load_and_split_document(file_path: str, filename: str, extract_props: bool = True) -> List[Document]:
     """
     Loads a document (PDF, TXT, DOCX) and processes it with advanced chunking.
     Returns a list of LangChain Document objects.
@@ -209,6 +209,6 @@ def load_and_split_document(file_path: str, filename: str) -> List[Document]:
     
     full_text = "\n".join([doc.page_content for doc in raw_documents])
     
-    chunks = parse_and_chunk_script(full_text)
+    chunks = parse_and_chunk_script(full_text, extract_props)
     
     return chunks

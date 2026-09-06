@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import asyncio
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -69,57 +70,84 @@ def parallel_search(query: str) -> str:
     """
     return f"Mocked Web Search Results for '{query}': According to recent production data, similar requirements typically incur a 15% budget premium due to 2026 industry standards and union rules."
 
-def process_agentic_chat(session_id: str, user_query: str, system_instruction: str = None) -> dict:
+async def process_agentic_chat(session_id: str = None, user_query: str = "", system_instruction: str = None) -> dict:
     """
-    Main orchestration loop for the agent using Gemini Tool Calling.
+    Main orchestration loop for the agent using Gemini Tool Calling and the Parallel Search MCP Server via FastMCP.
     """
     def retrieve_from_script(query: str) -> str:
         """
         Retrieves information from the uploaded screenplay document.
         Always use this tool first when asked about the script's contents.
         """
+        if not session_id:
+            return "No script has been uploaded. Do not attempt to search the script."
         return search_screenplay(session_id, query)
-
-    available_tools = {
-        "retrieve_from_script": retrieve_from_script,
-        "parallel_search": parallel_search
-    }
-
-    tools_list = [retrieve_from_script, parallel_search]
+        
     tool_log = []
 
     if MOCK_MODE:
         tool_log.append("Executing Agentic Loop (MOCK MODE)")
-        if "budget" in user_query.lower() or "cost" in user_query.lower() or "real world" in user_query.lower():
-            tool_log.append(f"Action: Call 'parallel_search' with query '{user_query}'")
-            context = parallel_search(user_query)
-        else:
-            tool_log.append(f"Action: Call 'retrieve_from_script' with query '{user_query}'")
-            context = retrieve_from_script(user_query)
+        tool_log.append(f"Action: Call 'retrieve_from_script' with query '{user_query}'")
+        context = retrieve_from_script(user_query)
             
         tool_log.append(f"Observation: {context[:100]}...")
         final_answer = f"Based on the agent's research: \n\nContext found: {context[:300]}..."
         return {"response": final_answer, "tool_log": tool_log}
-
-    else:
-        config_kwargs = {
-            "tools": tools_list,
-            "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True)
+        
+    # Start the Parallel Search MCP Server using FastMCP
+    npx_cmd = "npx.cmd" if os.name == "nt" else "npx"
+    mcp_config = {
+        "mcpServers": {
+            "parallel_search": {
+                "command": npx_cmd,
+                "args": ["-y", "@modelcontextprotocol/server-parallel-search"]
+            }
         }
+    }
+    
+    from fastmcp import Client
+    
+    async with Client(mcp_config) as mcp_client:
+        # Fetch tools exposed by the MCP server
+        mcp_tools = await mcp_client.list_tools()
+        
+        # Map MCP tools to Gemini function declarations
+        gemini_tools = [retrieve_from_script]
+        mcp_tool_map = {}
+        
+        for mcp_tool in mcp_tools:
+            # Convert MCP JSON schema to dict
+            gemini_tools.append({
+                "function_declarations": [
+                    {
+                        "name": mcp_tool.name,
+                        "description": mcp_tool.description,
+                        "parameters": mcp_tool.inputSchema
+                    }
+                ]
+            })
+            mcp_tool_map[mcp_tool.name] = mcp_tool
+
+        base_instruction = "You are a filmmaking and entertainment industry AI assistant. You must ONLY answer questions related to filmmaking, the entertainment industry, screenwriting, production, etc. using your parallel_search tool or general knowledge. If the user asks about unrelated topics, politely decline."
         if system_instruction:
-            config_kwargs["system_instruction"] = system_instruction
+            system_instruction = base_instruction + "\n\n" + system_instruction
+        else:
+            system_instruction = base_instruction
+
+        config_kwargs = {
+            "tools": gemini_tools,
+            "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True),
+            "system_instruction": system_instruction
+        }
             
         config = types.GenerateContentConfig(**config_kwargs)
         
-        # Initialize contents array with user prompt
-        contents = [
-            f""" User Question: {user_query}"""
-        ]
+        contents = [f" User Question: {user_query}"]
         
-        response = send_message_with_retry(client, model="gemini-2.5-flash", contents=contents, config=config)
+        # Use to_thread since send_message_with_retry uses blocking I/O (requests/sleep)
+        response = await asyncio.to_thread(send_message_with_retry, client, "gemini-2.5-flash", contents, config)
         
         while response.function_calls:
-            # Append model's tool calls to the history
             contents.append(response.candidates[0].content)
             tool_response_parts = []
             
@@ -129,14 +157,23 @@ def process_agentic_chat(session_id: str, user_query: str, system_instruction: s
                 
                 tool_log.append(f"Action: Call '{func_name}' with args: {args}")
                 
-                if func_name in available_tools:
-                    tool_func = available_tools[func_name]
-                    try:
-                        tool_result = tool_func(**args)
-                    except Exception as e:
-                        tool_result = f"Error executing tool: {e}"
-                else:
-                    tool_result = f"Error: Tool {func_name} not found."
+                try:
+                    if func_name == "retrieve_from_script":
+                        tool_result = retrieve_from_script(**args)
+                    elif func_name in mcp_tool_map:
+                        # Forward request to MCP server via fastmcp
+                        mcp_result = await mcp_client.call_tool_mcp(func_name, arguments=args)
+                        
+                        # Format MCP result content (often a list of TextContent objects)
+                        result_texts = []
+                        for content in mcp_result.content:
+                            if content.type == "text":
+                                result_texts.append(content.text)
+                        tool_result = "\n".join(result_texts)
+                    else:
+                        tool_result = f"Error: Tool {func_name} not found."
+                except Exception as e:
+                    tool_result = f"Error executing tool: {e}"
                     
                 tool_log.append(f"Observation: {str(tool_result)[:200]}...")
                 
@@ -147,11 +184,8 @@ def process_agentic_chat(session_id: str, user_query: str, system_instruction: s
                     )
                 )
                 
-            # Append the tool responses to the history
             contents.append(types.Content(role="user", parts=tool_response_parts))
-            
-            # Send back the results to get final generation
-            response = send_message_with_retry(client, model="gemini-2.5-flash", contents=contents, config=config)
+            response = await asyncio.to_thread(send_message_with_retry, client, "gemini-2.5-flash", contents, config)
 
         tool_log.append("Action: Return final response to user.")
         return {"response": response.text, "tool_log": tool_log}

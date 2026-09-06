@@ -9,6 +9,7 @@ class Document(BaseModel):
     checksum: Optional[str] = None
     upload_time: datetime = Field(default_factory=datetime.utcnow)
     status: str = "processing"
+    embedding_type: str = "vertexai"
 
 class Chunk(BaseModel):
     chunk_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

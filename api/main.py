@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from pydantic import BaseModel
 import shutil
 import os
@@ -11,7 +11,13 @@ from .models import Document, Insight, DB
 from .auth import verify_user_token
 from fastapi import Depends
 
+from .tools import producers, writers, enthusiasts
+
 app = FastAPI(title="SceneIQ API")
+
+app.include_router(producers.router)
+app.include_router(writers.router)
+app.include_router(enthusiasts.router)
 
 import tempfile
 
@@ -20,7 +26,7 @@ UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "sceneiq_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class ChatRequest(BaseModel):
-    session_id: str
+    session_id: str = None
     query: str
     system_instruction: str = None
 
@@ -31,9 +37,38 @@ class ChatResponse(BaseModel):
 class ResearchRequest(BaseModel):
     query: str
 
+
+def process_document_background(file_path: str, filename: str, document_id: str, extract_props: bool, embedding_type: str):
+    try:
+        chunks = load_and_split_document(file_path, filename, extract_props)
+        ingest_chunks_to_bq(chunks, document_id, embedding_type)
+        
+        doc = DB["documents"].get(document_id)
+        if doc:
+            doc.status = "indexed"
+            
+        mock_insight = Insight(
+            type="Complexity", severity="High", evidence_chunk_ids=["mock-chunk-1"],
+            explanation="Multiple night shoots detected.", confidence=0.85
+        )
+        DB["insights"][document_id] = [mock_insight]
+    except Exception as e:
+        print(f"Background ingestion failed: {e}")
+        doc = DB["documents"].get(document_id)
+        if doc:
+            doc.status = "failed"
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
 @app.post("/documents")
-async def upload_document(file: UploadFile = File(...), user: dict = Depends(verify_user_token)):
-    """Upload and register a screenplay."""
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    extract_props: bool = Form(True),
+    embedding_type: str = Form("vertexai"),
+    user: dict = Depends(verify_user_token)
+):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
         
@@ -46,27 +81,17 @@ async def upload_document(file: UploadFile = File(...), user: dict = Depends(ver
         shutil.copyfileobj(file.file, buffer)
         
     try:
-        doc = Document(filename=file.filename, status="processing")
+        doc = Document(filename=file.filename, status="processing", embedding_type=embedding_type)
         DB["documents"][doc.document_id] = doc
 
-        chunks = load_and_split_document(file_path, file.filename)
-        ingest_chunks_to_bq(chunks, doc.document_id)
-        
-        doc.status = "indexed"
-        
-        # Mock generating some insights
-        mock_insight = Insight(
-            type="Complexity", severity="High", evidence_chunk_ids=["mock-chunk-1"],
-            explanation="Multiple night shoots detected.", confidence=0.85
-        )
-        DB["insights"][doc.document_id] = [mock_insight]
+        background_tasks.add_task(process_document_background, file_path, file.filename, doc.document_id, extract_props, embedding_type)
         
         return {"document_id": doc.document_id, "status": doc.status}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
         if os.path.exists(file_path):
             os.remove(file_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/documents/{id}/status")
 async def get_document_status(id: str, user: dict = Depends(verify_user_token)):
@@ -86,7 +111,7 @@ async def get_document_insights(id: str, user: dict = Depends(verify_user_token)
 async def chat(request: ChatRequest, user: dict = Depends(verify_user_token)):
     """Run grounded SceneIQ conversation."""
     try:
-        result = process_agentic_chat(request.session_id, request.query, request.system_instruction)
+        result = await process_agentic_chat(request.session_id, request.query, request.system_instruction)
         return ChatResponse(response=result["response"], tool_log=result["tool_log"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

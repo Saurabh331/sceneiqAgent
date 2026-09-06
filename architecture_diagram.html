@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SceneIQ Architecture Flow</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        svg {
+            background-color: #252526;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .box {
+            fill: #333333;
+            stroke: #555555;
+            stroke-width: 2;
+            rx: 8;
+        }
+        .text {
+            fill: #ffffff;
+            font-size: 14px;
+            font-weight: bold;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        .subtext {
+            fill: #aaaaaa;
+            font-size: 11px;
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+        
+        /* Dashed paths for data flow */
+        .path {
+            fill: none;
+            stroke: #4CAF50;
+            stroke-width: 3;
+            stroke-dasharray: 8;
+            animation: dash 1s linear infinite;
+        }
+
+        .path.alt {
+            stroke: #2196F3;
+        }
+
+        .path.gemini {
+            stroke: #FF9800;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -16;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<svg width="900" height="600" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Arrowhead marker -->
+        <marker id="arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4CAF50" />
+        </marker>
+        <marker id="arrow-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#2196F3" />
+        </marker>
+        <marker id="arrow-orange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#FF9800" />
+        </marker>
+    </defs>
+
+    <!-- Nodes -->
+    
+    <!-- UI Layer -->
+    <rect x="50" y="250" width="160" height="80" class="box" />
+    <text x="130" y="280" class="text">Streamlit UI</text>
+    <text x="130" y="300" class="subtext">Chat & Tools</text>
+
+    <!-- API Layer -->
+    <rect x="280" y="250" width="160" height="80" class="box" />
+    <text x="360" y="280" class="text">FastAPI Backend</text>
+    <text x="360" y="300" class="subtext">Routing & Auth</text>
+
+    <!-- Knowledge Layer -->
+    <rect x="510" y="100" width="160" height="80" class="box" />
+    <text x="590" y="130" class="text">BigQuery RAG</text>
+    <text x="590" y="150" class="subtext">Vector Search (Script)</text>
+
+    <rect x="510" y="400" width="160" height="80" class="box" />
+    <text x="590" y="430" class="text">Parallel Search MCP</text>
+    <text x="590" y="450" class="subtext">Real-world Data</text>
+
+    <!-- Reasoning Layer -->
+    <rect x="710" y="250" width="160" height="80" class="box" />
+    <text x="790" y="280" class="text">Gemini 2.5</text>
+    <text x="790" y="300" class="subtext">Pro / Flash / Imagen</text>
+
+    <!-- Edges (Animated Paths) -->
+    
+    <!-- UI to API -->
+    <path d="M 210 290 L 270 290" class="path" marker-end="url(#arrow-green)" />
+    <!-- API to UI (Response) -->
+    <path d="M 280 270 L 220 270" class="path" marker-end="url(#arrow-green)" />
+    
+    <!-- API to BigQuery -->
+    <path d="M 440 270 C 470 270, 480 140, 500 140" class="path alt" marker-end="url(#arrow-blue)" />
+    <!-- BigQuery to API -->
+    <path d="M 510 160 C 490 160, 470 290, 450 290" class="path alt" marker-end="url(#arrow-blue)" />
+    
+    <!-- API to Parallel Search -->
+    <path d="M 440 310 C 470 310, 480 440, 500 440" class="path alt" marker-end="url(#arrow-blue)" />
+    <!-- Parallel Search to API -->
+    <path d="M 510 420 C 490 420, 470 290, 450 290" class="path alt" marker-end="url(#arrow-blue)" />
+
+    <!-- API to Gemini (with Context) -->
+    <path d="M 440 290 L 700 290" class="path gemini" marker-end="url(#arrow-orange)" />
+    <!-- Gemini to API (Structured Output) -->
+    <path d="M 710 270 L 450 270" class="path gemini" marker-end="url(#arrow-orange)" />
+
+    <!-- Explanatory Text at Bottom -->
+    <text x="450" y="550" fill="#dddddd" font-size="16" text-anchor="middle">
+        Animated Data Flow: Green (Requests/Responses) | Blue (Context Retrieval) | Orange (AI Generation)
+    </text>
+
+</svg>
+
+</body>
+</html>

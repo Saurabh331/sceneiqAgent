@@ -15,3 +15,8 @@ pypdf
 python-docx
 numpy>=2.0.0
 streamlit-oauth
+fpdf2
+google-cloud-storage
+sentence-transformers
+langchain-huggingface
+fastmcp
