@@ -1,6 +1,8 @@
 # Environments
 .env
 .venv
+sa-key.json
+*key*.json
 env/
 venv/
 ENV/
