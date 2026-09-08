@@ -56,6 +56,8 @@ jobs:
           region: ${{ env.REGION }}
           flags: |
             --allow-unauthenticated
+            --memory=2Gi
+            --cpu=1
             --set-env-vars=GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }},BQ_REGION=${{ env.REGION }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
 
       # ==========================================
@@ -76,6 +78,8 @@ jobs:
           region: ${{ env.REGION }}
           flags: |
             --allow-unauthenticated
+            --memory=1Gi
+            --cpu=1
             --set-env-vars=API_BASE_URL=${{ steps.deploy-api.outputs.url }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       - name: Print Service URLs
