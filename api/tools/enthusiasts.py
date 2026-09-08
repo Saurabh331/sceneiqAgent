@@ -4,8 +4,12 @@ from typing import List, Optional
 
 from ..auth import verify_user_token
 from ..rag import retrieve_from_bq
-from ..agent import client, MOCK_MODE
+from ..agent import MOCK_MODE, PROJECT_ID, LOCATION, credentials
+from google import genai
 from google.genai import types
+
+client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials) if not MOCK_MODE else None
+
 
 router = APIRouter(prefix="/tools/enthusiasts", tags=["Film Enthusiasts & Academics"])
 

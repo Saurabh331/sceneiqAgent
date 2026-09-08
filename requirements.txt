@@ -20,3 +20,7 @@ google-cloud-storage
 sentence-transformers
 langchain-huggingface
 fastmcp
+google-cloud-aiplatform[agent_engines,langchain]
+cloudpickle==3.0.0
+
+nest-asyncio

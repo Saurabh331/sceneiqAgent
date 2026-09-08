@@ -164,11 +164,18 @@ def parse_and_chunk_script(full_text: str, extract_props: bool = True) -> List[D
         return [Document(page_content=full_text, metadata={"global_context": global_context})]
         
     scene_texts = []
+    scene_headings = []
     for i in range(len(scene_splits)):
         start = scene_splits[i].start()
         end = scene_splits[i+1].start() if i + 1 < len(scene_splits) else len(full_text)
-        scene_texts.append((i, full_text[start:end]))
+        scene_text = full_text[start:end]
+        scene_texts.append((i, scene_text))
         
+        # Extract the heading (first line)
+        heading = scene_text.split('\n')[0].strip()
+        if heading:
+            scene_headings.append(heading)
+            
     documents = []
     
     # Process scenes concurrently with a ThreadPoolExecutor
@@ -186,7 +193,7 @@ def parse_and_chunk_script(full_text: str, extract_props: bool = True) -> List[D
                 scene_num = future_to_scene[future] + 1
                 print(f"Error processing scene {scene_num}: {e}")
 
-    return documents
+    return documents, scene_headings
 
 
 def load_and_split_document(file_path: str, filename: str, extract_props: bool = True) -> List[Document]:
@@ -209,6 +216,6 @@ def load_and_split_document(file_path: str, filename: str, extract_props: bool =
     
     full_text = "\n".join([doc.page_content for doc in raw_documents])
     
-    chunks = parse_and_chunk_script(full_text, extract_props)
+    chunks, scenes = parse_and_chunk_script(full_text, extract_props)
     
-    return chunks
+    return chunks, scenes

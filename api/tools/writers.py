@@ -4,7 +4,10 @@ from typing import List, Optional, Dict
 
 from ..auth import verify_user_token
 from ..rag import retrieve_from_bq
-from ..agent import parallel_search, client, MOCK_MODE
+from ..agent import parallel_search, MOCK_MODE, PROJECT_ID, LOCATION, credentials
+from google import genai
+
+client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials) if not MOCK_MODE else None
 from google.genai import types
 
 router = APIRouter(prefix="/tools/writers", tags=["Writers & Script Editors"])

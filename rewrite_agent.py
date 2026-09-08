@@ -1,4 +1,6 @@
-import os
+﻿import os
+
+new_agent_content = '''import os
 import json
 import time
 import asyncio
@@ -44,7 +46,7 @@ def retrieve_from_script(session_id: str, query: str) -> str:
     if not chunks:
         return "No relevant context found in the BigQuery Vector Store."
         
-    return "\n\n---\n\n".join(chunks)
+    return "\\n\\n---\\n\\n".join(chunks)
 
 def generate_storyboard_tool(session_id: str, scene_query: str) -> str:
     """
@@ -57,9 +59,9 @@ def generate_storyboard_tool(session_id: str, scene_query: str) -> str:
         
     # Reuse RAG to get scene context
     chunks = retrieve_from_bq(session_id, scene_query)
-    scene_context = "\n".join(chunks) if chunks else "No context found."
+    scene_context = "\\n".join(chunks) if chunks else "No context found."
     
-    prompt_instruction = f"Based on the following scene context, write a highly detailed, cinematic image generation prompt for a storyboard frame representing '{scene_query}'. Just output the prompt text.\n\nContext:\n{scene_context[:3000]}"
+    prompt_instruction = f"Based on the following scene context, write a highly detailed, cinematic image generation prompt for a storyboard frame representing '{scene_query}'. Just output the prompt text.\\n\\nContext:\\n{scene_context[:3000]}"
     
     from google import genai
     client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials)
@@ -72,16 +74,16 @@ def generate_storyboard_tool(session_id: str, scene_query: str) -> str:
 
 def script_doctor_tool(session_id: str, framework: str) -> str:
     """
-    Runs the Script Doctor to analyze the pacing and structure of the script against a given framework (e.g., 'Hero\'s Journey').
+    Runs the Script Doctor to analyze the pacing and structure of the script against a given framework (e.g., 'Hero\\'s Journey').
     Requires the session_id.
     """
     if MOCK_MODE:
         return f"Mock Script Doctor Analysis using {framework}: The pacing is good, but Act 2 lags."
         
     chunks = retrieve_from_bq(session_id, "entire script plot summary", top_k=20)
-    context = "\n".join(chunks) if chunks else "No context found."
+    context = "\\n".join(chunks) if chunks else "No context found."
     
-    prompt = f"Analyze the pacing and structural beats of the following script chunks using the '{framework}' framework. Identify any pacing issues or missing beats.\n\n{context[:8000]}"
+    prompt = f"Analyze the pacing and structural beats of the following script chunks using the '{framework}' framework. Identify any pacing issues or missing beats.\\n\\n{context[:8000]}"
     
     from google import genai
     client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials)
@@ -128,7 +130,7 @@ def parallel_search(query: str) -> str:
                 for content in mcp_result.content:
                     if content.type == "text":
                         result_texts.append(content.text)
-                return "\n".join(result_texts)
+                return "\\n".join(result_texts)
         except Exception as e:
             return f"Error executing FastMCP: {e}"
             
@@ -150,15 +152,15 @@ async def process_agentic_chat(session_id: str = None, user_query: str = "", sys
         tool_log.append(f"Action: Call 'retrieve_from_script' with query '{user_query}'")
         context = retrieve_from_script(session_id, user_query)
         tool_log.append(f"Observation: {context[:100]}...")
-        final_answer = f"Based on the agent's research: \n\nContext found: {context[:300]}..."
+        final_answer = f"Based on the agent's research: \\n\\nContext found: {context[:300]}..."
         return {"response": final_answer, "tool_log": tool_log}
         
-    base_instruction = "You are a filmmaking and entertainment industry AI assistant. You must ONLY answer questions related to filmmaking, the entertainment industry, screenwriting, production, etc. using your tools or general knowledge. If the user asks about unrelated topics, politely decline.\n\n"
+    base_instruction = "You are a filmmaking and entertainment industry AI assistant. You must ONLY answer questions related to filmmaking, the entertainment industry, screenwriting, production, etc. using your tools or general knowledge. If the user asks about unrelated topics, politely decline.\\n\\n"
     if session_id:
-        base_instruction += f"IMPORTANT: You are analyzing a document with session_id = '{session_id}'. You MUST pass this exact session_id string to any tool that requires it as an argument.\n"
+        base_instruction += f"IMPORTANT: You are analyzing a document with session_id = '{session_id}'. You MUST pass this exact session_id string to any tool that requires it as an argument.\\n"
     
     if system_instruction:
-        base_instruction += f"\n{system_instruction}"
+        base_instruction += f"\\n{system_instruction}"
 
     # Initialize the LangchainAgent from Vertex AI Reasoning Engine
     agent = LangchainAgent(
@@ -190,3 +192,9 @@ async def process_agentic_chat(session_id: str = None, user_query: str = "", sys
     except Exception as e:
         print(f"Agent Engine Error: {e}")
         return {"response": f"An error occurred during agent execution: {e}", "tool_log": tool_log}
+'''
+
+with open('api/agent.py', 'w', encoding='utf-8') as f:
+    f.write(new_agent_content)
+
+print("api/agent.py rewritten.")

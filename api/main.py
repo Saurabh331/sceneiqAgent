@@ -40,12 +40,13 @@ class ResearchRequest(BaseModel):
 
 def process_document_background(file_path: str, filename: str, document_id: str, extract_props: bool, embedding_type: str):
     try:
-        chunks = load_and_split_document(file_path, filename, extract_props)
+        chunks, scenes = load_and_split_document(file_path, filename, extract_props)
         ingest_chunks_to_bq(chunks, document_id, embedding_type)
         
         doc = DB["documents"].get(document_id)
         if doc:
             doc.status = "indexed"
+            doc.scenes = scenes
             
         mock_insight = Insight(
             type="Complexity", severity="High", evidence_chunk_ids=["mock-chunk-1"],

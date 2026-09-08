@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-import time
 import requests
 from streamlit_oauth import OAuth2Component
 from dotenv import load_dotenv
@@ -79,7 +78,7 @@ else:
         st.header("Document Ingestion")
         uploaded_file = st.file_uploader("Upload Screenplay", type=["pdf", "txt", "md"])
         
-        extract_props = st.checkbox("Extract Atomic Propositions (Slower, High Cost)", value=True, help="Disable this for extremely large scripts to speed up ingestion.")
+        extract_props = st.checkbox("Extract Atomic Propositions (Slower)", value=True, help="Disable this for extremely large scripts to speed up ingestion.")
         model_choice = st.radio("Select Embedding Model", ["Vertex AI (Small Documents)", "Hugging Face (Large Documents)"])
         embedding_type = "vertexai" if "Vertex AI" in model_choice else "huggingface"
         
@@ -100,6 +99,7 @@ else:
                             st.session_state.session_id = resp_data.get("document_id")
                             
                             progress_text = st.empty()
+                            import time
                             while True:
                                 status_res = requests.get(f"{API_BASE_URL}/documents/{st.session_state.session_id}/status", headers=headers)
                                 if status_res.status_code == 200:
@@ -127,6 +127,24 @@ else:
     with tab_chat:
         st.header("SceneIQ Chat")
         
+        with st.expander("ℹ️ Help & Suggested Questions", expanded=False):
+            st.markdown("""
+            **How to use the Agent:**
+            The SceneIQ agent has access to tools to help answer your questions. It will automatically route your request based on what you ask:
+            - **Script Analysis:** For questions about the uploaded screenplay (e.g., characters, plot, scenes), the agent uses `retrieve_from_script`.
+            - **Industry Knowledge:** For questions about filmmaking techniques, equipment, or industry standards, the agent uses `parallel_search`.
+            - **Producer Tools:** To generate mock storyboards or image prompts for scenes, ask the agent to create a storyboard. It will use `generate_storyboard_tool`.
+            - **Writer Tools:** For feedback on pacing, structure, and character arcs, ask the agent to act as a script doctor. It will use `script_doctor_tool`.
+            
+            **Suggested Questions:**
+            - *Who are the main characters and what are their motivations?*
+            - *Summarize the events of the climax.*
+            - *What are the typical lighting setups for a film noir scene?*
+            - *How much does it cost to rent an ARRI Alexa camera?*
+            - *Generate a storyboard prompt for the opening scene.*
+            - *Act as a script doctor and analyze the pacing of this script using the Hero's Journey framework.*
+            """)
+        
         # Display chat messages from history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
@@ -145,7 +163,7 @@ else:
                         payload = {
                             "session_id": st.session_state.session_id,
                             "query": prompt,
-                            "system_instruction": "You are a filmmaking expert. Use retrieve_from_script for script info and parallel_search for industry info."
+                            "system_instruction": "You are a filmmaking expert. Use retrieve_from_script for script info, parallel_search for industry info, generate_storyboard_tool for generating storyboards/image prompts, and script_doctor_tool for script analysis and pacing feedback."
                         }
                         response = requests.post(f"{API_BASE_URL}/chat", json=payload, headers=headers)
                         
@@ -168,17 +186,8 @@ else:
 
     with tab_producers:
         st.header("Filmmakers & Producers Tools")
-        if st.button("Generate Script Breakdown (Mock)"):
-            with st.spinner("Processing..."):
-                headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
-                payload = {"session_id": st.session_state.session_id or "demo", "scene_query": "Act 1"}
-                res = requests.post(f"{API_BASE_URL}/tools/producers/breakdown", json=payload, headers=headers)
-                if res.status_code == 200:
-                    st.json(res.json())
-                else:
-                    st.error("Error calling endpoint")
-                    
-        st.subheader("Batch Storyboard Generation")
+        
+        # Load scenes into session state if they aren't there
         if "available_scenes" not in st.session_state:
             st.session_state.available_scenes = []
             
@@ -193,48 +202,36 @@ else:
                 else:
                     st.error("Failed to load scenes.")
                     
+        selected_scene = None
         if st.session_state.available_scenes:
-            selected_scenes = st.multiselect("Select Scenes", st.session_state.available_scenes, default=st.session_state.available_scenes)
+            selected_scene = st.selectbox("Select a Scene", st.session_state.available_scenes)
             
-            if st.button("Generate Storyboards Document"):
-                if not selected_scenes:
-                    st.warning("Please select at least one scene.")
-                else:
+        if selected_scene:
+            if st.button("Generate Script Breakdown (Mock)"):
+                with st.spinner("Processing..."):
                     headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
-                    payload = {"session_id": st.session_state.session_id or "demo", "scenes": selected_scenes}
-                    res = requests.post(f"{API_BASE_URL}/tools/producers/storyboard/batch", json=payload, headers=headers)
+                    payload = {"session_id": st.session_state.session_id or "demo", "scene_query": selected_scene}
+                    res = requests.post(f"{API_BASE_URL}/tools/producers/breakdown", json=payload, headers=headers)
                     if res.status_code == 200:
-                        task_id = res.json().get("task_id")
-                        st.info("Task submitted! Generating in background...")
-                        
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        while True:
-                            status_res = requests.get(f"{API_BASE_URL}/tools/producers/storyboard/status/{task_id}", headers=headers)
-                            if status_res.status_code == 200:
-                                status_data = status_res.json()
-                                stat = status_data.get("status")
-                                prog = status_data.get("progress", 0)
-                                total = status_data.get("total", len(selected_scenes))
-                                
-                                progress_val = prog / total if total > 0 else 0
-                                progress_bar.progress(progress_val)
-                                status_text.write(f"Status: {stat} ({prog}/{total})")
-                                
-                                if stat == "completed":
-                                    url = status_data.get("url")
-                                    if url and url.startswith("/"):
-                                        url = f"{API_BASE_URL}{url}"
-                                    st.success("Generation Complete!")
-                                    st.markdown(f"[**Download Storyboard PDF here**]({url})")
-                                    break
-                                elif stat == "failed":
-                                    st.error("Task failed.")
-                                    break
-                            time.sleep(2)
+                        st.json(res.json())
                     else:
-                        st.error("Failed to submit batch generation task.")
+                        st.error("Error calling endpoint")
+                        
+            if st.button("Generate Storyboard (Mock)"):
+                with st.spinner("Generating Image Prompts..."):
+                    headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
+                    payload = {"session_id": st.session_state.session_id or "demo", "scene_query": selected_scene}
+                    res = requests.post(f"{API_BASE_URL}/tools/producers/storyboard", json=payload, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        st.write(f"**Prompt:** {data.get('image_prompt')}")
+                        if data.get("image_base64"):
+                            import base64
+                            st.image(base64.b64decode(data["image_base64"]))
+                        else:
+                            st.json(data)
+                    else:
+                        st.error("Error calling endpoint")
 
     with tab_writers:
         st.header("Writers & Script Editors Tools")
