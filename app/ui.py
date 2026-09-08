@@ -233,24 +233,46 @@ else:
                             "query": prompt,
                             "system_instruction": "You are a filmmaking expert. Use retrieve_from_script for script info, parallel_search for industry info, generate_storyboard_tool for generating storyboards/image prompts, and script_doctor_tool for script analysis and pacing feedback."
                         }
-                        response = requests.post(f"{API_BASE_URL}/chat", json=payload, headers=headers)
+                        response = requests.post(f"{API_BASE_URL}/chat", json=payload, headers=headers, stream=True)
                         
                         if response.status_code == 200:
-                            data = response.json()
-                            assistant_response = data.get("response", "Error: No response generated.")
-                            tool_log = data.get("tool_log", [])
+                            full_response = ""
+                            tool_logs = []
+                            status_placeholder = st.empty()
                             
-                            if tool_log:
+                            def stream_parser():
+                                global full_response
+                                import json
+                                for line in response.iter_lines():
+                                    if line:
+                                        try:
+                                            data = json.loads(line)
+                                            if data["type"] == "chunk":
+                                                full_response += data["content"]
+                                                yield data["content"]
+                                            elif data["type"] == "log":
+                                                tool_logs.append(data["content"])
+                                                status_placeholder.info(data["content"])
+                                            elif data["type"] == "error":
+                                                status_placeholder.error(data["content"])
+                                                yield "\n**Error:** " + data["content"]
+                                        except Exception as e:
+                                            pass
+                                status_placeholder.empty()
+                                
+                            st.write_stream(stream_parser())
+                            
+                            if tool_logs:
                                 with st.expander("Agent Thought Process", expanded=False):
-                                    for log in tool_log:
+                                    for log in tool_logs:
                                         st.text(log)
                                         
-                            st.markdown(assistant_response)
                             st.session_state.messages.append({
                                 "role": "assistant", 
-                                "content": assistant_response,
-                                "tool_log": tool_log
+                                "content": full_response,
+                                "tool_log": tool_logs
                             })
+                            # We don't need to rerun here since we've already rendered the output, but rerunning ensures a clean layout.
                             st.rerun()
                         else:
                             st.error(f"API Error: {response.text}")

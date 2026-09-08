@@ -10,7 +10,7 @@ import logging
 from .logger import get_logger
 from .ingestion import load_and_split_document
 from .rag import ingest_chunks_to_bq
-from .agent import process_agentic_chat, parallel_search
+from .agent import parallel_search
 from .models import Document, Insight, DB
 from .auth import verify_user_token
 from fastapi import Depends
@@ -116,14 +116,20 @@ async def get_document_insights(id: str, user: dict = Depends(verify_user_token)
     insights = DB["insights"].get(id, [])
     return {"document_id": id, "insights": insights}
 
-@app.post("/chat", response_model=ChatResponse)
+from fastapi.responses import StreamingResponse
+
+@app.post("/chat")
 async def chat(request: ChatRequest, user: dict = Depends(verify_user_token)):
     """Run grounded SceneIQ conversation."""
     logger.info(f"Received chat request for session: {request.session_id}")
     try:
-        result = await process_agentic_chat(request.session_id, request.query, request.system_instruction)
-        logger.info(f"Chat request processed successfully for session: {request.session_id}")
-        return ChatResponse(response=result["response"], tool_log=result["tool_log"])
+        from .agent import process_agentic_chat_stream
+        
+        # Return a StreamingResponse using the generator
+        return StreamingResponse(
+            process_agentic_chat_stream(request.session_id, request.query, request.system_instruction),
+            media_type="application/x-ndjson"
+        )
     except Exception as e:
         logger.error(f"Chat execution failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

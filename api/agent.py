@@ -10,7 +10,7 @@ from .rag import retrieve_from_bq
 
 import vertexai
 from vertexai.preview.reasoning_engines import LangchainAgent
-
+from google import genai
 from .logger import get_logger
 
 logger = get_logger(__name__)
@@ -145,19 +145,27 @@ def parallel_search(query: str) -> str:
 
 # --- Agent Orchestration ---
 
-async def process_agentic_chat(session_id: str = None, user_query: str = "", system_instruction: str = None) -> dict:
+async def process_agentic_chat_stream(session_id: str = None, user_query: str = "", system_instruction: str = None):
     """
     Main orchestration loop for the agent using Vertex AI Reasoning Engine (LangchainAgent).
+    Yields JSON strings containing intermediate steps and final response for streaming.
     """
     tool_log = []
 
     if MOCK_MODE:
-        tool_log.append("Executing Agentic Loop (MOCK MODE)")
-        tool_log.append(f"Action: Call 'retrieve_from_script' with query '{user_query}'")
+        yield json.dumps({"type": "log", "content": "Executing Agentic Loop (MOCK MODE)"}) + "\n"
+        await asyncio.sleep(0.5)
+        yield json.dumps({"type": "log", "content": f"Action: Call 'retrieve_from_script' with query '{user_query}'"}) + "\n"
         context = retrieve_from_script(session_id, user_query)
-        tool_log.append(f"Observation: {context[:100]}...")
+        await asyncio.sleep(0.5)
+        yield json.dumps({"type": "log", "content": f"Observation: {context[:100]}..."}) + "\n"
         final_answer = f"Based on the agent's research: \n\nContext found: {context[:300]}..."
-        return {"response": final_answer, "tool_log": tool_log}
+        
+        # Simulate text streaming
+        for chunk in final_answer.split(" "):
+            yield json.dumps({"type": "chunk", "content": chunk + " "}) + "\n"
+            await asyncio.sleep(0.1)
+        return
         
     base_instruction = "You are a filmmaking and entertainment industry AI assistant. You must ONLY answer questions related to filmmaking, the entertainment industry, screenwriting, production, etc. using your tools or general knowledge. If the user asks about unrelated topics, politely decline.\n\nCRITICAL TOOL USAGE RULE: When the user asks for real-world information, current data, external industry context, budget info, or real-time pricing (e.g., camera rental costs, equipment specs), you MUST use the `parallel_search` tool to find the answer. Do NOT guess or say you don't know without trying the `parallel_search` tool first.\n\n"
     if session_id:
@@ -174,43 +182,38 @@ async def process_agentic_chat(session_id: str = None, user_query: str = "", sys
         system_instruction=base_instruction
     )
     
-    # Execute the agent synchronously (using to_thread to avoid blocking FastAPI's loop)
     try:
-        logger.info(f"Starting agent execution for session {session_id} with query: {user_query}")
-        # LangchainAgent.query() returns a dictionary. Since return_intermediate_steps=True, 
-        # it should contain 'output' and 'intermediate_steps'.
+        logger.info(f"Starting streaming agent execution for session {session_id} with query: {user_query}")
+        
+        # Fallback to streaming the final response chunk by chunk since native ReasoningEngine might not easily stream events
         response = await asyncio.to_thread(agent.query, input=user_query)
+        
+        intermediate_steps = response.get("intermediate_steps", [])
+        for step in intermediate_steps:
+            action, observation = step
+            tool_name = action.get("tool") if isinstance(action, dict) else getattr(action, "tool", "unknown")
+            tool_input = action.get("tool_input") if isinstance(action, dict) else getattr(action, "tool_input", "unknown")
+            
+            log_msg = f"Action: Call '{tool_name}' with args: {tool_input}"
+            logger.info(f"Agent Action: {log_msg}")
+            yield json.dumps({"type": "log", "content": log_msg}) + "\n"
+            yield json.dumps({"type": "log", "content": f"Observation: {str(observation)[:200]}..."}) + "\n"
+            
+        yield json.dumps({"type": "log", "content": "Action: Return final response to user."}) + "\n"
         
         final_text_raw = response.get("output", "")
         if isinstance(final_text_raw, list):
-            parts = []
-            for part in final_text_raw:
-                if isinstance(part, dict) and "text" in part:
-                    parts.append(part["text"])
-                elif isinstance(part, str):
-                    parts.append(part)
-                else:
-                    parts.append(str(part))
+            parts = [part["text"] if isinstance(part, dict) and "text" in part else str(part) for part in final_text_raw]
             final_text = "".join(parts)
         else:
             final_text = str(final_text_raw)
             
-        intermediate_steps = response.get("intermediate_steps", [])
-        
-        for step in intermediate_steps:
-            # step is usually a tuple (AgentAction, Observation)
-            action, observation = step
-            tool_name = action.get("tool") if isinstance(action, dict) else getattr(action, "tool", "unknown")
-            tool_input = action.get("tool_input") if isinstance(action, dict) else getattr(action, "tool_input", "unknown")
-            logger.info(f"Agent Action: Call '{tool_name}' with args: {tool_input}")
-            tool_log.append(f"Action: Call '{tool_name}' with args: {tool_input}")
-            tool_log.append(f"Observation: {str(observation)[:200]}...")
+        # Stream the text chunks
+        # To make it appear streaming and avoid timeouts, we yield words
+        words = final_text.split(" ")
+        for i, word in enumerate(words):
+            yield json.dumps({"type": "chunk", "content": word + (" " if i < len(words) - 1 else "")}) + "\n"
             
-        tool_log.append("Action: Return final response to user.")
-        logger.info("Agent execution completed successfully.")
-        
-        return {"response": final_text, "tool_log": tool_log}
-        
     except Exception as e:
         logger.error(f"Agent Engine Error: {e}", exc_info=True)
-        return {"response": f"An error occurred during agent execution: {e}", "tool_log": tool_log}
+        yield json.dumps({"type": "error", "content": f"An error occurred during agent execution: {e}"}) + "\n"

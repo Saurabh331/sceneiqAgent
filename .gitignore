@@ -160,3 +160,6 @@ dist-ssr/
 
 # Temp Downloads
 node.zip
+
+# VS Code
+.vscode/
