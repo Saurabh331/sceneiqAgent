@@ -19,17 +19,28 @@ load_dotenv()
 credentials = get_google_credentials()
 API_KEY = os.getenv("GEMINI_API_KEY")
 
+client = None
+MOCK_MODE = False
+
 if API_KEY and API_KEY != "mock":
     # Use API Key for Google AI Studio
-    # client = genai.Client(api_key=API_KEY)
-    MOCK_MODE = False
-elif credentials:
-    # If no API key is provided, assume we want Vertex AI using GCP credentials
+    try:
+        client = genai.Client(api_key=API_KEY)
+        MOCK_MODE = False
+    except Exception as e:
+        print(f"Warning: Failed to initialize genai.Client with API_KEY: {e}")
+
+if client is None and credentials:
+    # Fallback to Vertex AI using GCP credentials
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
     location = os.getenv("BQ_REGION", "us-central1")
-    client = genai.Client(vertexai=True, project=project_id, location=location, credentials=credentials)
-    MOCK_MODE = False
-else:
+    try:
+        client = genai.Client(vertexai=True, project=project_id, location=location, credentials=credentials)
+        MOCK_MODE = False
+    except Exception as e:
+        print(f"Warning: Failed to initialize Vertex AI genai.Client: {e}")
+
+if client is None:
     client = None
     MOCK_MODE = True
 
