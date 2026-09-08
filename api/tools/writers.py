@@ -5,7 +5,10 @@ from typing import List, Optional, Dict
 from ..auth import verify_user_token
 from ..rag import retrieve_from_bq
 from ..agent import parallel_search, MOCK_MODE, PROJECT_ID, LOCATION, credentials
+from ..logger import get_logger
 from google import genai
+
+logger = get_logger(__name__)
 
 client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials) if not MOCK_MODE else None
 from google.genai import types
@@ -42,6 +45,7 @@ class LocalizationResponse(BaseModel):
 
 @router.post("/script_doctor", response_model=ScriptDoctorResponse)
 async def dynamic_script_doctor(request: ScriptDoctorRequest, user: dict = Depends(verify_user_token)):
+    logger.info(f"Running script doctor for session {request.session_id} using framework: {request.framework}")
     framework_context = parallel_search(f"What are the key structural beats of {request.framework}?")
     chunks = retrieve_from_bq(request.session_id, "entire script summary and main plot points")
     script_context = "\n".join(chunks) if chunks else "No script context found."

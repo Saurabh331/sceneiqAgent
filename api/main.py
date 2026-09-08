@@ -1,9 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from pydantic import BaseModel
+from typing import List, Optional
 import shutil
 import os
 import uuid
+import tempfile
+import logging
 
+from .logger import get_logger
 from .ingestion import load_and_split_document
 from .rag import ingest_chunks_to_bq
 from .agent import process_agentic_chat, parallel_search
@@ -13,13 +17,13 @@ from fastapi import Depends
 
 from .tools import producers, writers, enthusiasts
 
+logger = get_logger(__name__)
+
 app = FastAPI(title="SceneIQ API")
 
 app.include_router(producers.router)
 app.include_router(writers.router)
 app.include_router(enthusiasts.router)
-
-import tempfile
 
 # Ensure upload directory exists
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "sceneiq_uploads")
@@ -40,6 +44,7 @@ class ResearchRequest(BaseModel):
 
 def process_document_background(file_path: str, filename: str, document_id: str, extract_props: bool, embedding_type: str):
     try:
+        logger.info(f"Processing document {document_id} in background: {filename}")
         chunks, scenes = load_and_split_document(file_path, filename, extract_props)
         ingest_chunks_to_bq(chunks, document_id, embedding_type)
         
@@ -53,8 +58,9 @@ def process_document_background(file_path: str, filename: str, document_id: str,
             explanation="Multiple night shoots detected.", confidence=0.85
         )
         DB["insights"][document_id] = [mock_insight]
+        logger.info(f"Successfully processed document {document_id}")
     except Exception as e:
-        print(f"Background ingestion failed: {e}")
+        logger.error(f"Background ingestion failed for {document_id}: {e}")
         doc = DB["documents"].get(document_id)
         if doc:
             doc.status = "failed"
@@ -77,7 +83,7 @@ async def upload_document(
     if file_ext not in [".pdf", ".txt", ".md", ".docx"]:
          raise HTTPException(status_code=400, detail="Only PDF, DOCX, and TXT/MD files are supported.")
          
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}_{file.filename}")
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
@@ -85,12 +91,14 @@ async def upload_document(
         doc = Document(filename=file.filename, status="processing", embedding_type=embedding_type)
         DB["documents"][doc.document_id] = doc
 
+        logger.info(f"Starting background processing for document: {doc.document_id} (Extract Props: {extract_props})")
         background_tasks.add_task(process_document_background, file_path, file.filename, doc.document_id, extract_props, embedding_type)
         
         return {"document_id": doc.document_id, "status": doc.status}
     except Exception as e:
         if os.path.exists(file_path):
             os.remove(file_path)
+        logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -111,10 +119,13 @@ async def get_document_insights(id: str, user: dict = Depends(verify_user_token)
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, user: dict = Depends(verify_user_token)):
     """Run grounded SceneIQ conversation."""
+    logger.info(f"Received chat request for session: {request.session_id}")
     try:
         result = await process_agentic_chat(request.session_id, request.query, request.system_instruction)
+        logger.info(f"Chat request processed successfully for session: {request.session_id}")
         return ChatResponse(response=result["response"], tool_log=result["tool_log"])
     except Exception as e:
+        logger.error(f"Chat execution failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/research")

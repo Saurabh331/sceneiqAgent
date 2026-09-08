@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #05070B;
+    background-image: radial-gradient(circle at 15% 50%, rgba(107, 33, 168, 0.05), transparent 25%),
+                      radial-gradient(circle at 85% 30%, rgba(5, 150, 105, 0.03), transparent 25%);
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(12, 15, 22, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .msg-animate {
+    animation: slideFadeUp 0.4s ease-out forwards;
+  }
+
+  .msg-animate:nth-child(1) { animation-delay: 0.1s; }
+  .msg-animate:nth-child(2) { animation-delay: 0.2s; }
+  .msg-animate:nth-child(3) { animation-delay: 0.3s; }
+  
+  .dot-1 { animation: typing 1.4s infinite ease-in-out both; }
+  .dot-2 { animation: typing 1.4s infinite ease-in-out 0.2s both; }
+  .dot-3 { animation: typing 1.4s infinite ease-in-out 0.4s both; }
+}
+
+@keyframes slideFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing {
+  0%, 100% { transform: translateY(0); opacity: 0.3; box-shadow: 0 0 0 rgba(255,255,255,0); }
+  50% { transform: translateY(-3px); opacity: 1; box-shadow: 0 0 8px rgba(255,255,255,0.4); }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

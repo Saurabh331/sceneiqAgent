@@ -1,4 +1,4 @@
-﻿import os
+import os
 import vertexai
 from vertexai import agent_engines
 from dotenv import load_dotenv
@@ -36,8 +36,8 @@ def deploy():
                 "cloudpickle==3.0.0",
                 "pydantic>=2.10",
                 "requests",
-                "fastmcp",
-                "nest-asyncio"
+                "google-genai",
+                "langchain-google-genai"
             ]
         )
         print("\\nDeployment Successful!")

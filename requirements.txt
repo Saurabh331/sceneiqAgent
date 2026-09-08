@@ -9,6 +9,7 @@ python-dotenv
 langchain
 langchain-community
 langchain-google-vertexai
+langchain-google-genai
 langchain-google-community[bq]
 google-cloud-bigquery
 pypdf
@@ -22,5 +23,6 @@ langchain-huggingface
 fastmcp
 google-cloud-aiplatform[agent_engines,langchain]
 cloudpickle==3.0.0
-
+pandas-gbq
 nest-asyncio
+ddgs

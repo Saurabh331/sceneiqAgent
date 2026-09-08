@@ -10,6 +10,10 @@ import os
 from fpdf import FPDF
 from google.cloud import storage
 
+from ..logger import get_logger
+
+logger = get_logger(__name__)
+
 from ..auth import verify_user_token, get_google_credentials
 from ..rag import retrieve_from_bq
 from ..agent import MOCK_MODE, PROJECT_ID, LOCATION, credentials 
@@ -73,6 +77,7 @@ class CastAnalysisResponse(BaseModel):
     match_score: float = Field(description="A score from 0.0 to 1.0 indicating fit")
 
 def generate_storyboards_background(task_id: str, request: BatchStoryboardRequest):
+    logger.info(f"Starting storyboard batch generation task: {task_id}")
     storyboard_tasks[task_id] = {"status": "processing", "progress": 0, "total": len(request.scenes), "url": None}
     
     pdf = FPDF()
@@ -135,6 +140,7 @@ def generate_storyboards_background(task_id: str, request: BatchStoryboardReques
         # If successfully uploaded to GCS, we can remove the local file
         os.remove(pdf_path)
     
+    logger.info(f"Storyboard task {task_id} completed. URL: {url}")
     storyboard_tasks[task_id]["status"] = "completed"
     storyboard_tasks[task_id]["url"] = url
 

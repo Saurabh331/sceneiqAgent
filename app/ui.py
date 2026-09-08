@@ -17,6 +17,59 @@ REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 st.set_page_config(page_title="SceneIQ MVP", page_icon="🎬", layout="wide")
 
+# Inject Cinematic CSS Theme
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+/* Global Font and Backgrounds */
+html, body, [class*="css"]  {
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+
+.stApp {
+    background-color: #05070B !important;
+    background-image: radial-gradient(circle at 15% 50%, rgba(107, 33, 168, 0.05), transparent 25%),
+                      radial-gradient(circle at 85% 30%, rgba(5, 150, 105, 0.03), transparent 25%);
+}
+
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+    background-color: #0C0F16 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Hide default Streamlit headers */
+header {visibility: hidden;}
+.stDeployButton {display:none;}
+#MainMenu {visibility: hidden;}
+
+/* Chat Messages */
+[data-testid="stChatMessage"] {
+    background: rgba(12, 15, 22, 0.6) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+/* Chat Input Floating Deck */
+[data-testid="stChatInput"] {
+    background: rgba(12, 15, 22, 0.8) !important;
+    border-radius: 30px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75) !important;
+}
+
+/* Headings and text */
+h1, h2, h3, h4, p, span, div {
+    color: #e5e7eb !important;
+}
+</style>
+""", unsafe_allow_html=True)
 # Initialize the Streamlit OAuth Component
 oauth2 = OAuth2Component(
     client_id=CLIENT_ID,
@@ -106,7 +159,6 @@ else:
                                     status_data = status_res.json()
                                     if status_data.get("status") == "indexed":
                                         progress_text.success("Document processed and indexed successfully!")
-                                        st.session_state.messages = []
                                         break
                                     elif status_data.get("status") == "failed":
                                         progress_text.error("Document ingestion failed.")
@@ -145,18 +197,33 @@ else:
             - *Act as a script doctor and analyze the pacing of this script using the Hero's Journey framework.*
             """)
         
-        # Display chat messages from history
+        # Display chat messages from history inside a scrollable container
+        chat_container = st.container(height=500)
         for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
+            with chat_container.chat_message(message["role"]):
                 st.markdown(message["content"])
+                if message.get("tool_log"):
+                    with st.expander("Agent Thought Process", expanded=False):
+                        for log in message["tool_log"]:
+                            st.text(log)
+
+        col1, col2 = st.columns([0.8, 0.2])
+        with col2:
+            # Only show retry if the last message was from the user (meaning assistant failed) 
+            # or if we just want to let them retry the last query
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+                if st.button("🔄 Retry Last", use_container_width=True):
+                    prompt = st.session_state.messages[-1]["content"]
+                    st.session_state.messages.pop() # Remove the last user message so we don't duplicate it
+                    st.rerun()
 
         # Accept user input
         if prompt := st.chat_input("Ask a question about the screenplay or filmmaking..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
+            with chat_container.chat_message("user"):
                 st.markdown(prompt)
 
-            with st.chat_message("assistant"):
+            with chat_container.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     try:
                         headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
@@ -178,7 +245,12 @@ else:
                                         st.text(log)
                                         
                             st.markdown(assistant_response)
-                            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+                            st.session_state.messages.append({
+                                "role": "assistant", 
+                                "content": assistant_response,
+                                "tool_log": tool_log
+                            })
+                            st.rerun()
                         else:
                             st.error(f"API Error: {response.text}")
                     except Exception as e:
