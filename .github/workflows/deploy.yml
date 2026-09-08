@@ -1,0 +1,85 @@
+name: Deploy SceneIQ to GCP Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: project-e5e39fb0-29d0-40c5-8b3
+  REGION: us-central1
+  GAR_REPOSITORY: sceneiq-repo
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/461270763906/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-deployer@project-e5e39fb0-29d0-40c5-8b3.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # ==========================================
+      # 1. Build and Deploy FastAPI Backend
+      # ==========================================
+      - name: Build & Push Backend Image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/sceneiq-api:${{ github.sha }}"
+          docker build -t $IMAGE -f Dockerfile.api .
+          docker push $IMAGE
+
+      - name: Deploy Backend to Cloud Run
+        id: deploy-api
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: sceneiq-api
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/sceneiq-api:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: |
+            --allow-unauthenticated
+            --set-env-vars=GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }},BQ_REGION=${{ env.REGION }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+
+      # ==========================================
+      # 2. Build and Deploy Streamlit Frontend
+      # ==========================================
+      - name: Build & Push Frontend Image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/sceneiq-ui:${{ github.sha }}"
+          docker build -t $IMAGE -f Dockerfile.ui .
+          docker push $IMAGE
+
+      - name: Deploy Frontend to Cloud Run
+        id: deploy-ui
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: sceneiq-ui
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/sceneiq-ui:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: |
+            --allow-unauthenticated
+            --set-env-vars=API_BASE_URL=${{ steps.deploy-api.outputs.url }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+
+      - name: Print Service URLs
+        run: |
+          echo "================================================="
+          echo "Backend API URL : ${{ steps.deploy-api.outputs.url }}"
+          echo "Frontend UI URL : ${{ steps.deploy-ui.outputs.url }}"
+          echo "================================================="
