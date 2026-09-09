@@ -25,10 +25,12 @@ import tempfile
 UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "sceneiq_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+from typing import Optional, List
+
 class ChatRequest(BaseModel):
-    session_id: str = None
+    session_id: Optional[str] = None
     query: str
-    system_instruction: str = None
+    system_instruction: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
