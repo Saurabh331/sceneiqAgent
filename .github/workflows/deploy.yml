@@ -80,7 +80,7 @@ jobs:
             --allow-unauthenticated
             --memory=1Gi
             --cpu=1
-            --set-env-vars=API_BASE_URL=${{ steps.deploy-api.outputs.url }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            --set-env-vars=API_BASE_URL=${{ steps.deploy-api.outputs.url }},REDIRECT_URI=https://sceneiq-ui-pplroob62a-uc.a.run.app/,GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
 
       - name: Print Service URLs
         run: |
