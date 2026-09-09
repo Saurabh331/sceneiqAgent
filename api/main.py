@@ -72,7 +72,6 @@ def process_document_background(file_path: str, filename: str, document_id: str,
 
 @app.post("/documents")
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     extract_props: bool = Form(True),
     embedding_type: str = Form("vertexai"),
@@ -93,8 +92,12 @@ async def upload_document(
         doc = Document(filename=file.filename, status="processing", embedding_type=embedding_type)
         DB["documents"][doc.document_id] = doc
 
-        logger.info(f"Starting background processing for document: {doc.document_id} (Extract Props: {extract_props})")
-        background_tasks.add_task(process_document_background, file_path, file.filename, doc.document_id, extract_props, embedding_type)
+        logger.info(f"Starting processing for document: {doc.document_id} (Extract Props: {extract_props})")
+        # Process synchronously since Cloud Run throttles CPU after returning the response
+        process_document_background(file_path, file.filename, doc.document_id, extract_props, embedding_type)
+        
+        # doc is updated in the DB
+        doc = DB["documents"].get(doc.document_id, doc)
         
         return {"document_id": doc.document_id, "status": doc.status}
     except Exception as e:
