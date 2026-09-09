@@ -1,56 +1,90 @@
 import os
 from typing import List
 from google.cloud import bigquery
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_community import BigQueryVectorStore
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+from .logger import get_logger
 
-load_dotenv()
+logger = get_logger(__name__)
+
+load_dotenv(find_dotenv())
 
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "mock-project-id")
 DATASET = os.getenv("BQ_DATASET", "sceneiq_dataset")
 REGION = os.getenv("BQ_REGION", "us-central1")
 TABLE_NAME = "screenplay_embeddings"
 
-def get_vector_store() -> BigQueryVectorStore:
-    """Initializes and returns the BigQuery Vector Store."""
-    embeddings = VertexAIEmbeddings(
-        model_name="textembedding-gecko@003",
-        project=PROJECT_ID
-    )
+def get_vector_store(embedding_type: str = "vertexai") -> BigQueryVectorStore:
+    """Initializes and returns the BigQuery Vector Store dynamically based on type."""
+    from .auth import get_google_credentials
+    credentials = get_google_credentials()
+
+    if embedding_type == "huggingface":
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        table_name = "screenplay_embeddings_large"
+    else:
+        embeddings = VertexAIEmbeddings(
+            model_name="text-embedding-004",
+            project=PROJECT_ID,
+            credentials=credentials
+        )
+        table_name = "screenplay_embeddings"
     
-    # In a real environment, BigQueryVectorStore needs valid credentials and project setup.
-    # We try to initialize it; if it fails due to mock keys, we handle it in the caller.
+    client = bigquery.Client(project=PROJECT_ID, credentials=credentials) if credentials else None
+    
     store = BigQueryVectorStore(
         project_id=PROJECT_ID,
         dataset_name=DATASET,
-        table_name=TABLE_NAME,
+        table_name=table_name,
         location=REGION,
         embedding=embeddings,
     )
+    
     return store
 
-def ingest_chunks_to_bq(chunks: List, session_id: str):
+def ingest_chunks_to_bq(chunks: List, session_id: str, embedding_type: str = "vertexai"):
     """Embeds and stores chunks in BigQuery."""
     # Inject session_id into metadata for filtering during retrieval
     for chunk in chunks:
         chunk.metadata["session_id"] = session_id
         
-    store = get_vector_store()
+    store = get_vector_store(embedding_type)
     
     if PROJECT_ID == "mock-project-id":
-        print(f"[MOCK] Would ingest {len(chunks)} chunks into BigQuery dataset {DATASET}.{TABLE_NAME}")
+        print(f"[MOCK] Would ingest {len(chunks)} chunks into BigQuery dataset {DATASET}.{store.table_name}")
         return
         
-    # Add documents to the vector store
-    store.add_documents(chunks)
+    # Add documents to the vector store in batches to avoid Vertex AI embedding limit (20k tokens)
+    batch_size = 10
+    
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    def upload_batch(b):
+        store.add_documents(b)
+        
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = []
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            futures.append(executor.submit(upload_batch, batch))
+            
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error uploading batch to BigQuery: {e}")
 
 def retrieve_from_bq(session_id: str, query: str, top_k: int = 4) -> List[str]:
     """Retrieves context from BigQuery using vector similarity."""
     if PROJECT_ID == "mock-project-id":
         return [f"[MOCK BQ] Retrieved mock context for query '{query}' from session {session_id}."]
         
-    store = get_vector_store()
+    from .models import DB
+    doc = DB["documents"].get(session_id)
+    embedding_type = doc.embedding_type if doc else "vertexai"
+    store = get_vector_store(embedding_type)
     
     # Filter by session_id to only search within the uploaded document
     # Note: BigQueryVectorStore supports filtering via metadata dicts or SQL WHERE strings depending on version.

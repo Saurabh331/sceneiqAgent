@@ -1,0 +1,222 @@
+# SceneIQ API Documentation
+
+## Base URL
+`http://localhost:8000`
+
+## Authentication
+All endpoints require a Google OAuth ID token passed in the `Authorization` header.
+Format: `Authorization: Bearer <token>`
+
+---
+
+## 1. Filmmakers & Producers Endpoints
+
+### 1.1 Generate Storyboard
+**Endpoint**: `POST /tools/producers/storyboard`
+
+Extracts structural scene data and generates visual frame references using Gemini and Imagen 3.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "scene_query": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "scene_description": "string",
+  "image_prompt": "string",
+  "image_base64": "string (optional base64 encoded image)"
+}
+```
+
+### 1.2 Automated Breakdown
+**Endpoint**: `POST /tools/producers/breakdown`
+
+Parses scenes, characters, props, and locations into structured formats.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "scene_query": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "scenes": ["string"],
+  "characters": ["string"],
+  "props": ["string"],
+  "locations": ["string"]
+}
+```
+
+### 1.3 Interactive Casting
+**Endpoint**: `POST /tools/producers/cast_analysis`
+
+Cross-references audition videos against character profiles stored in BigQuery.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "character_name": "string",
+  "video_uri": "string (e.g., gs://...)"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "character_profile": "string",
+  "performance_analysis": "string",
+  "match_score": 0.89
+}
+```
+
+---
+
+## 2. Writers & Script Editors Endpoints
+
+### 2.1 Dynamic Script Doctor
+**Endpoint**: `POST /tools/writers/script_doctor`
+
+Compares script structural beats against classic dramatic frameworks using parallel search.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "framework": "string (default: Hero's Journey)"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "pacing_analysis": "string",
+  "plot_holes": ["string"],
+  "structural_beats": {
+    "Beat Name": "Scene description"
+  }
+}
+```
+
+### 2.2 Bespoke Dialog Partner
+**Endpoint**: `POST /tools/writers/dialog_partner`
+
+Chat directly with a character based on their dialogue history and subtext.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "character_name": "string",
+  "user_message": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "character_response": "string",
+  "subtext_hints": ["string"]
+}
+```
+
+### 2.3 Localization Engine
+**Endpoint**: `POST /tools/writers/localization`
+
+Translates scenes while preserving regional slang and emotional tone.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "scene_query": "string",
+  "target_language": "string",
+  "regional_context": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "translated_text": "string",
+  "translation_notes": ["string"]
+}
+```
+
+---
+
+## 3. Film Enthusiasts & Academics Endpoints
+
+### 3.1 Cinematic Deep Research
+**Endpoint**: `POST /tools/enthusiasts/research`
+
+Synthesizes academic-level breakdowns with precise page-level citations.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "query": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "synthesis": "string",
+  "citations": ["string"]
+}
+```
+
+### 3.2 CYOA Simulator
+**Endpoint**: `POST /tools/enthusiasts/cyoa`
+
+Interactive role-playing game based on script lore.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "current_state": "string",
+  "user_choice": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "new_scenario": "string",
+  "options": ["string", "string", "string"],
+  "lore_validation": true
+}
+```
+
+### 3.3 Director's Commentary
+**Endpoint**: `POST /tools/enthusiasts/commentary`
+
+Maps timestamps and production notes to script chunks.
+
+**Request Payload:**
+```json
+{
+  "session_id": "string",
+  "scene_query": "string"
+}
+```
+
+**Response Payload:**
+```json
+{
+  "commentary_track": "string",
+  "production_notes": ["string"]
+}
+```
