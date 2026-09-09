@@ -64,7 +64,7 @@ def ingest_chunks_to_bq(chunks: List, session_id: str, embedding_type: str = "ve
     def upload_batch(b):
         store.add_documents(b)
         
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = []
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i:i + batch_size]
