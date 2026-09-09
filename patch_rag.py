@@ -6,7 +6,8 @@ with open('api/rag.py', 'r', encoding='utf-8') as f:
 # Add Vertex AI import back
 content = content.replace(
     'from langchain_huggingface import HuggingFaceEmbeddings',
-    'from langchain_huggingface import HuggingFaceEmbeddings\nfrom langchain_google_genai import GoogleGenerativeAIEmbeddings'
+    'from langchain_huggingface import HuggingFaceEmbeddings',
+    'from langchain_google_vertexai import VertexAIEmbeddings'
 )
 
 # Replace get_vector_store
@@ -43,9 +44,10 @@ new_get_vector_store = '''def get_vector_store(embedding_type: str = "vertexai")
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         table_name = "screenplay_embeddings_large"
     else:
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
-            google_api_key=credentials.token if credentials else None
+        embeddings = VertexAIEmbeddings(
+            model_name="text-embedding-004",
+            project=PROJECT_ID,
+            credentials=credentials
         )
         table_name = "screenplay_embeddings"
     

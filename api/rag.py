@@ -2,7 +2,7 @@ import os
 from typing import List
 from google.cloud import bigquery
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_vertexai import VertexAIEmbeddings
 from langchain_google_community import BigQueryVectorStore
 from dotenv import load_dotenv, find_dotenv
 from .logger import get_logger
@@ -25,8 +25,10 @@ def get_vector_store(embedding_type: str = "vertexai") -> BigQueryVectorStore:
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         table_name = "screenplay_embeddings_large"
     else:
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004"
+        embeddings = VertexAIEmbeddings(
+            model_name="text-embedding-004",
+            project=PROJECT_ID,
+            credentials=credentials
         )
         table_name = "screenplay_embeddings"
     
@@ -54,11 +56,25 @@ def ingest_chunks_to_bq(chunks: List, session_id: str, embedding_type: str = "ve
         print(f"[MOCK] Would ingest {len(chunks)} chunks into BigQuery dataset {DATASET}.{store.table_name}")
         return
         
-    # Add documents to the vector store in batches to avoid Vertex AI embedding limit (250)
-    batch_size = 250
-    for i in range(0, len(chunks), batch_size):
-        batch = chunks[i:i + batch_size]
-        store.add_documents(batch)
+    # Add documents to the vector store in batches to avoid Vertex AI embedding limit (20k tokens)
+    batch_size = 10
+    
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    def upload_batch(b):
+        store.add_documents(b)
+        
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            futures.append(executor.submit(upload_batch, batch))
+            
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error uploading batch to BigQuery: {e}")
 
 def retrieve_from_bq(session_id: str, query: str, top_k: int = 4) -> List[str]:
     """Retrieves context from BigQuery using vector similarity."""

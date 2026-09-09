@@ -179,7 +179,7 @@ def parse_and_chunk_script(full_text: str, extract_props: bool = True) -> List[D
     documents = []
     
     # Process scenes concurrently with a ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         future_to_scene = {
             executor.submit(process_scene, i, text, global_context, extract_props): i 
             for i, text in scene_texts
