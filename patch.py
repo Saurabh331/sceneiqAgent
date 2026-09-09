@@ -53,7 +53,7 @@ def generate_storyboards_background(task_id: str, request: BatchStoryboardReques
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    pdf.cell(200, 10, txt="Storyboards", ln=True, align='C')
+    pdf.cell(200, 10, text="Storyboards", ln=True, align='C')
     
     for i, scene in enumerate(request.scenes):
         chunks = retrieve_from_bq(request.session_id, scene)
@@ -80,18 +80,18 @@ def generate_storyboards_background(task_id: str, request: BatchStoryboardReques
                     temp_img.write(image_bytes)
                     temp_img_path = temp_img.name
                 
-            pdf.cell(200, 10, txt=f"Scene: {scene}", ln=True)
-            pdf.multi_cell(0, 10, txt=f"Prompt: {image_prompt}")
+            pdf.cell(200, 10, text=f"Scene: {scene}", ln=True)
+            pdf.multi_cell(0, 10, text=f"Prompt: {image_prompt}")
             if temp_img_path:
                 pdf.image(temp_img_path, w=150)
                 pdf.ln(10)
                 os.remove(temp_img_path)
             else:
-                pdf.cell(200, 10, txt="(Mock Image)", ln=True)
+                pdf.cell(200, 10, text="(Mock Image)", ln=True)
                 pdf.ln(10)
         except Exception as e:
             print(f"Failed to generate for scene {scene}: {e}")
-            pdf.cell(200, 10, txt=f"Scene: {scene} (Failed to generate)", ln=True)
+            pdf.cell(200, 10, text=f"Scene: {scene} (Failed to generate)", ln=True)
             
         storyboard_tasks[task_id]["progress"] = i + 1
         

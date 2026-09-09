@@ -2,9 +2,12 @@ import os
 from typing import List
 from google.cloud import bigquery
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_google_vertexai import VertexAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_community import BigQueryVectorStore
 from dotenv import load_dotenv, find_dotenv
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 load_dotenv(find_dotenv())
 
@@ -22,11 +25,8 @@ def get_vector_store(embedding_type: str = "vertexai") -> BigQueryVectorStore:
         embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         table_name = "screenplay_embeddings_large"
     else:
-        embeddings = VertexAIEmbeddings(
-            model="gemini-embedding-001",
-            project=PROJECT_ID,
-            credentials=credentials,
-            dimensions=256
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/text-embedding-004"
         )
         table_name = "screenplay_embeddings"
     

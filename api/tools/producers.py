@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -10,9 +10,16 @@ import os
 from fpdf import FPDF
 from google.cloud import storage
 
+from ..logger import get_logger
+
+logger = get_logger(__name__)
+
 from ..auth import verify_user_token, get_google_credentials
 from ..rag import retrieve_from_bq
-from ..agent import client, MOCK_MODE
+from ..agent import MOCK_MODE, PROJECT_ID, LOCATION, credentials 
+from google import genai
+
+client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials) if not MOCK_MODE else None
 from google.genai import types
 
 router = APIRouter(prefix="/tools/producers", tags=["Filmmakers & Producers"])
@@ -70,6 +77,7 @@ class CastAnalysisResponse(BaseModel):
     match_score: float = Field(description="A score from 0.0 to 1.0 indicating fit")
 
 def generate_storyboards_background(task_id: str, request: BatchStoryboardRequest):
+    logger.info(f"Starting storyboard batch generation task: {task_id}")
     storyboard_tasks[task_id] = {"status": "processing", "progress": 0, "total": len(request.scenes), "url": None}
     
     pdf = FPDF()
@@ -77,7 +85,7 @@ def generate_storyboards_background(task_id: str, request: BatchStoryboardReques
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    pdf.cell(200, 10, txt="Storyboards", ln=True, align='C')
+    pdf.cell(200, 10, text="Storyboards", ln=True, align='C')
     
     for i, scene in enumerate(request.scenes):
         chunks = retrieve_from_bq(request.session_id, scene)
@@ -104,18 +112,18 @@ def generate_storyboards_background(task_id: str, request: BatchStoryboardReques
                     temp_img.write(image_bytes)
                     temp_img_path = temp_img.name
                 
-            pdf.cell(200, 10, txt=f"Scene: {scene}", ln=True)
-            pdf.multi_cell(0, 10, txt=f"Prompt: {image_prompt}")
+            pdf.cell(200, 10, text=f"Scene: {scene}", ln=True)
+            pdf.multi_cell(0, 10, text=f"Prompt: {image_prompt}")
             if temp_img_path:
                 pdf.image(temp_img_path, w=150)
                 pdf.ln(10)
                 os.remove(temp_img_path)
             else:
-                pdf.cell(200, 10, txt="(Mock Image)", ln=True)
+                pdf.cell(200, 10, text="(Mock Image)", ln=True)
                 pdf.ln(10)
         except Exception as e:
             print(f"Failed to generate for scene {scene}: {e}")
-            pdf.cell(200, 10, txt=f"Scene: {scene} (Failed to generate)", ln=True)
+            pdf.cell(200, 10, text=f"Scene: {scene} (Failed to generate)", ln=True)
             
         storyboard_tasks[task_id]["progress"] = i + 1
         
@@ -132,6 +140,7 @@ def generate_storyboards_background(task_id: str, request: BatchStoryboardReques
         # If successfully uploaded to GCS, we can remove the local file
         os.remove(pdf_path)
     
+    logger.info(f"Storyboard task {task_id} completed. URL: {url}")
     storyboard_tasks[task_id]["status"] = "completed"
     storyboard_tasks[task_id]["url"] = url
 

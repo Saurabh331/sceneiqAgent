@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-import time
 import requests
 from streamlit_oauth import OAuth2Component
 from dotenv import load_dotenv
@@ -19,6 +18,59 @@ REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 
 st.set_page_config(page_title="SceneIQ MVP", page_icon="🎬", layout="wide")
 
+# Inject Cinematic CSS Theme
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+/* Global Font and Backgrounds */
+html, body, [class*="css"]  {
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+
+.stApp {
+    background-color: #05070B !important;
+    background-image: radial-gradient(circle at 15% 50%, rgba(107, 33, 168, 0.05), transparent 25%),
+                      radial-gradient(circle at 85% 30%, rgba(5, 150, 105, 0.03), transparent 25%);
+}
+
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+    background-color: #0C0F16 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Hide default Streamlit headers */
+header {visibility: hidden;}
+.stDeployButton {display:none;}
+#MainMenu {visibility: hidden;}
+
+/* Chat Messages */
+[data-testid="stChatMessage"] {
+    background: rgba(12, 15, 22, 0.6) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+/* Chat Input Floating Deck */
+[data-testid="stChatInput"] {
+    background: rgba(12, 15, 22, 0.8) !important;
+    border-radius: 30px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75) !important;
+}
+
+/* Headings and text */
+h1, h2, h3, h4, p, span, div {
+    color: #e5e7eb !important;
+}
+</style>
+""", unsafe_allow_html=True)
 # Initialize the Streamlit OAuth Component
 oauth2 = OAuth2Component(
     client_id=CLIENT_ID,
@@ -80,7 +132,7 @@ else:
         st.header("Document Ingestion")
         uploaded_file = st.file_uploader("Upload Screenplay", type=["pdf", "txt", "md"])
         
-        extract_props = st.checkbox("Extract Atomic Propositions (Slower, High Cost)", value=True, help="Disable this for extremely large scripts to speed up ingestion.")
+        extract_props = st.checkbox("Extract Atomic Propositions (Slower)", value=True, help="Disable this for extremely large scripts to speed up ingestion.")
         model_choice = st.radio("Select Embedding Model", ["Vertex AI (Small Documents)", "Hugging Face (Large Documents)"])
         embedding_type = "vertexai" if "Vertex AI" in model_choice else "huggingface"
         
@@ -101,13 +153,13 @@ else:
                             st.session_state.session_id = resp_data.get("document_id")
                             
                             progress_text = st.empty()
+                            import time
                             while True:
                                 status_res = requests.get(f"{API_BASE_URL}/documents/{st.session_state.session_id}/status", headers=headers)
                                 if status_res.status_code == 200:
                                     status_data = status_res.json()
                                     if status_data.get("status") == "indexed":
                                         progress_text.success("Document processed and indexed successfully!")
-                                        st.session_state.messages = []
                                         break
                                     elif status_data.get("status") == "failed":
                                         progress_text.error("Document ingestion failed.")
@@ -128,40 +180,100 @@ else:
     with tab_chat:
         st.header("SceneIQ Chat")
         
-        # Display chat messages from history
+        with st.expander("ℹ️ Help & Suggested Questions", expanded=False):
+            st.markdown("""
+            **How to use the Agent:**
+            The SceneIQ agent has access to tools to help answer your questions. It will automatically route your request based on what you ask:
+            - **Script Analysis:** For questions about the uploaded screenplay (e.g., characters, plot, scenes), the agent uses `retrieve_from_script`.
+            - **Industry Knowledge:** For questions about filmmaking techniques, equipment, or industry standards, the agent uses `parallel_search`.
+            - **Producer Tools:** To generate mock storyboards or image prompts for scenes, ask the agent to create a storyboard. It will use `generate_storyboard_tool`.
+            - **Writer Tools:** For feedback on pacing, structure, and character arcs, ask the agent to act as a script doctor. It will use `script_doctor_tool`.
+            
+            **Suggested Questions:**
+            - *Who are the main characters and what are their motivations?*
+            - *Summarize the events of the climax.*
+            - *What are the typical lighting setups for a film noir scene?*
+            - *How much does it cost to rent an ARRI Alexa camera?*
+            - *Generate a storyboard prompt for the opening scene.*
+            - *Act as a script doctor and analyze the pacing of this script using the Hero's Journey framework.*
+            """)
+        
+        # Display chat messages from history inside a scrollable container
+        chat_container = st.container(height=500)
         for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
+            with chat_container.chat_message(message["role"]):
                 st.markdown(message["content"])
+                if message.get("tool_log"):
+                    with st.expander("Agent Thought Process", expanded=False):
+                        for log in message["tool_log"]:
+                            st.text(log)
+
+        col1, col2 = st.columns([0.8, 0.2])
+        with col2:
+            # Only show retry if the last message was from the user (meaning assistant failed) 
+            # or if we just want to let them retry the last query
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+                if st.button("🔄 Retry Last", use_container_width=True):
+                    prompt = st.session_state.messages[-1]["content"]
+                    st.session_state.messages.pop() # Remove the last user message so we don't duplicate it
+                    st.rerun()
 
         # Accept user input
         if prompt := st.chat_input("Ask a question about the screenplay or filmmaking..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
+            with chat_container.chat_message("user"):
                 st.markdown(prompt)
 
-            with st.chat_message("assistant"):
+            with chat_container.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     try:
                         headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
                         payload = {
                             "session_id": st.session_state.session_id,
                             "query": prompt,
-                            "system_instruction": "You are a filmmaking expert. Use retrieve_from_script for script info and parallel_search for industry info."
+                            "system_instruction": "You are a filmmaking expert. Use retrieve_from_script for script info, parallel_search for industry info, generate_storyboard_tool for generating storyboards/image prompts, and script_doctor_tool for script analysis and pacing feedback."
                         }
-                        response = requests.post(f"{API_BASE_URL}/chat", json=payload, headers=headers)
+                        response = requests.post(f"{API_BASE_URL}/chat", json=payload, headers=headers, stream=True)
                         
                         if response.status_code == 200:
-                            data = response.json()
-                            assistant_response = data.get("response", "Error: No response generated.")
-                            tool_log = data.get("tool_log", [])
+                            full_response = ""
+                            tool_logs = []
+                            status_placeholder = st.empty()
                             
-                            if tool_log:
+                            def stream_parser():
+                                global full_response
+                                import json
+                                for line in response.iter_lines():
+                                    if line:
+                                        try:
+                                            data = json.loads(line)
+                                            if data["type"] == "chunk":
+                                                full_response += data["content"]
+                                                yield data["content"]
+                                            elif data["type"] == "log":
+                                                tool_logs.append(data["content"])
+                                                status_placeholder.info(data["content"])
+                                            elif data["type"] == "error":
+                                                status_placeholder.error(data["content"])
+                                                yield "\n**Error:** " + data["content"]
+                                        except Exception as e:
+                                            pass
+                                status_placeholder.empty()
+                                
+                            st.write_stream(stream_parser())
+                            
+                            if tool_logs:
                                 with st.expander("Agent Thought Process", expanded=False):
-                                    for log in tool_log:
+                                    for log in tool_logs:
                                         st.text(log)
                                         
-                            st.markdown(assistant_response)
-                            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+                            st.session_state.messages.append({
+                                "role": "assistant", 
+                                "content": full_response,
+                                "tool_log": tool_logs
+                            })
+                            # We don't need to rerun here since we've already rendered the output, but rerunning ensures a clean layout.
+                            st.rerun()
                         else:
                             st.error(f"API Error: {response.text}")
                     except Exception as e:
@@ -169,17 +281,8 @@ else:
 
     with tab_producers:
         st.header("Filmmakers & Producers Tools")
-        if st.button("Generate Script Breakdown (Mock)"):
-            with st.spinner("Processing..."):
-                headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
-                payload = {"session_id": st.session_state.session_id or "demo", "scene_query": "Act 1"}
-                res = requests.post(f"{API_BASE_URL}/tools/producers/breakdown", json=payload, headers=headers)
-                if res.status_code == 200:
-                    st.json(res.json())
-                else:
-                    st.error("Error calling endpoint")
-                    
-        st.subheader("Batch Storyboard Generation")
+        
+        # Load scenes into session state if they aren't there
         if "available_scenes" not in st.session_state:
             st.session_state.available_scenes = []
             
@@ -194,48 +297,36 @@ else:
                 else:
                     st.error("Failed to load scenes.")
                     
+        selected_scene = None
         if st.session_state.available_scenes:
-            selected_scenes = st.multiselect("Select Scenes", st.session_state.available_scenes, default=st.session_state.available_scenes)
+            selected_scene = st.selectbox("Select a Scene", st.session_state.available_scenes)
             
-            if st.button("Generate Storyboards Document"):
-                if not selected_scenes:
-                    st.warning("Please select at least one scene.")
-                else:
+        if selected_scene:
+            if st.button("Generate Script Breakdown (Mock)"):
+                with st.spinner("Processing..."):
                     headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
-                    payload = {"session_id": st.session_state.session_id or "demo", "scenes": selected_scenes}
-                    res = requests.post(f"{API_BASE_URL}/tools/producers/storyboard/batch", json=payload, headers=headers)
+                    payload = {"session_id": st.session_state.session_id or "demo", "scene_query": selected_scene}
+                    res = requests.post(f"{API_BASE_URL}/tools/producers/breakdown", json=payload, headers=headers)
                     if res.status_code == 200:
-                        task_id = res.json().get("task_id")
-                        st.info("Task submitted! Generating in background...")
-                        
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        while True:
-                            status_res = requests.get(f"{API_BASE_URL}/tools/producers/storyboard/status/{task_id}", headers=headers)
-                            if status_res.status_code == 200:
-                                status_data = status_res.json()
-                                stat = status_data.get("status")
-                                prog = status_data.get("progress", 0)
-                                total = status_data.get("total", len(selected_scenes))
-                                
-                                progress_val = prog / total if total > 0 else 0
-                                progress_bar.progress(progress_val)
-                                status_text.write(f"Status: {stat} ({prog}/{total})")
-                                
-                                if stat == "completed":
-                                    url = status_data.get("url")
-                                    if url and url.startswith("/"):
-                                        url = f"{API_BASE_URL}{url}"
-                                    st.success("Generation Complete!")
-                                    st.markdown(f"[**Download Storyboard PDF here**]({url})")
-                                    break
-                                elif stat == "failed":
-                                    st.error("Task failed.")
-                                    break
-                            time.sleep(2)
+                        st.json(res.json())
                     else:
-                        st.error("Failed to submit batch generation task.")
+                        st.error("Error calling endpoint")
+                        
+            if st.button("Generate Storyboard (Mock)"):
+                with st.spinner("Generating Image Prompts..."):
+                    headers = {"Authorization": f"Bearer {token_data['token']['id_token']}"}
+                    payload = {"session_id": st.session_state.session_id or "demo", "scene_query": selected_scene}
+                    res = requests.post(f"{API_BASE_URL}/tools/producers/storyboard", json=payload, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        st.write(f"**Prompt:** {data.get('image_prompt')}")
+                        if data.get("image_base64"):
+                            import base64
+                            st.image(base64.b64decode(data["image_base64"]))
+                        else:
+                            st.json(data)
+                    else:
+                        st.error("Error calling endpoint")
 
     with tab_writers:
         st.header("Writers & Script Editors Tools")

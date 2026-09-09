@@ -1,11 +1,19 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional
+import concurrent.futures
 
 from ..auth import verify_user_token
+from ..logger import get_logger
 from ..rag import retrieve_from_bq
-from ..agent import client, MOCK_MODE
+from ..agent import MOCK_MODE, PROJECT_ID, LOCATION, credentials
+from google import genai
 from google.genai import types
+
+logger = get_logger(__name__)
+
+client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION, credentials=credentials) if not MOCK_MODE else None
+
 
 router = APIRouter(prefix="/tools/enthusiasts", tags=["Film Enthusiasts & Academics"])
 
@@ -37,6 +45,7 @@ class CommentaryResponse(BaseModel):
 
 @router.post("/research", response_model=ResearchResponse)
 async def cinematic_deep_research(request: ResearchRequest, user: dict = Depends(verify_user_token)):
+    logger.info(f"User {user.get('email')} requesting research: {request.query}")
     chunks = retrieve_from_bq(request.session_id, request.query)
     context = "\n".join(chunks) if chunks else "No relevant context found."
     
@@ -60,10 +69,18 @@ async def cinematic_deep_research(request: ResearchRequest, user: dict = Depends
     try:
         return ResearchResponse.model_validate_json(response.text)
     except Exception as e:
+        logger.error(f"Error parsing research response: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to parse structured output: {e}")
 
 @router.post("/cyoa", response_model=CYOAResponse)
 async def cyoa_simulator(request: CYOARequest, user: dict = Depends(verify_user_token)):
+    def parallel_search(query: str) -> str:
+        """
+        Search wikipedia and duckduckgo in parallel.
+        """
+        logger.info(f"Running parallel search for query: {query}")
+        return "Search results placeholder"
+
     lore_chunks = retrieve_from_bq(request.session_id, "world building rules and tone")
     lore_context = "\n".join(lore_chunks) if lore_chunks else "No lore context found."
     
